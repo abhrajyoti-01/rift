@@ -1,0 +1,23 @@
+# Binaries and test artifacts
+*.exe
+*.exe~
+*.test
+*.out
+rift
+cmd/rift/rift
+
+# Benchmark / profiling outputs (committed results live under bench/results/)
+*.prof
+*.pprof
+*.trace
+
+# Local environment and editor state
+.env
+.idea/
+.vscode/
+*.swp
+.qwen/
+
+# OS noise
+.DS_Store
+Thumbs.db
