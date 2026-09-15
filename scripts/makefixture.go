@@ -1,18 +1,32 @@
 package main
 
-import "os"
+import (
+	"fmt"
+	"os"
+)
 
-// makefixture writes a deterministic media fixture for local testing.
+// makefixture writes a deterministic media fixture for local testing and
+// benchmarks. The content is a repeating byte pattern so that a range
+// request can be verified against exact file offsets.
 func main() {
-	const path = "bench/fixtures/sample.bin"
-	if err := os.MkdirAll("bench/fixtures", 0o755); err != nil {
-		panic(err)
+	const dir = "bench/fixtures"
+	const path = dir + "/sample.bin"
+
+	// Create the directory first: a fresh clone has no bench/fixtures, and
+	// writing before creating it fails.
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, "rift: makefixture:", err)
+		os.Exit(1)
 	}
-	data := make([]byte, 1<<20)
+
+	const size = 1 << 20 // 1 MiB
+	data := make([]byte, size)
 	for i := range data {
 		data[i] = byte(i % 251)
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, "rift: makefixture:", err)
+		os.Exit(1)
 	}
+	fmt.Printf("wrote %s (%d bytes)\n", path, size)
 }
