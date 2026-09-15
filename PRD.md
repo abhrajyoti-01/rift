@@ -82,8 +82,8 @@ Status: **✅ implemented and tested** · **◐ partial, with the gap stated** �
 | F-4 | Seven-class error taxonomy driving log level, metric label, retry | ✅ | `errs_test.go` |
 | F-5 | Structured logging with request/trace ID plumbing | ◐ | Package present; not yet wired through every call site |
 | F-6 | Prometheus metrics registry with closed label sets | ◐ | Counters exist per component; registry wiring on the admin plane is incomplete |
-| F-7 | Liveness/readiness endpoints distinct in meaning | ◐ | `/healthz` and `/readyz` served by media and hub; LB admin exposes topology |
-| F-8 | Ordered shutdown with drain budgets; exit 4 on exceeded drain | ✅ | `lifecycle_test.go` |
+| F-7 | Liveness/readiness endpoints distinct in meaning | ◐ | `/healthz` and `/readyz` served by media and hub; the LB admin plane exposes topology but not `/healthz` |
+| F-8 | Ordered shutdown with drain budgets; exit 4 on exceeded drain | ◐ | The `lifecycle` package implements and tests this. **The `rift lb` command does not use it**: it waits on the signal context and closes listeners, so in-flight connections are dropped rather than drained, and exit code 4 is never produced. Wiring the services through `lifecycle` remains. |
 
 ### Load balancer
 
@@ -98,7 +98,7 @@ Status: **✅ implemented and tested** · **◐ partial, with the gap stated** �
 | F-16 | Round-robin, smooth weighted RR, least-connections | ✅ | χ² distribution test, exact 5:3:1 interleave test, min-inflight tests |
 | F-17 | Zero-allocation pick path | ✅ | `testing.AllocsPerRun` assertion (0 allocs at 64 backends) |
 | F-18 | Active TCP and HTTP health checks with rise/fall hysteresis | ✅ | `TestTrackerHysteresis`, checker tests against real listeners |
-| F-19 | Closed retry table; unknown verbs never retry | ✅ | `TestRetryTable` (11 cases) |
+| F-19 | Closed retry table; unknown verbs never retry | ◐ | `Retryable` implements the table and `TestRetryTable` covers 11 cases, but **the proxy never calls it**: `MaxAttempts`, `IdempotentPutDelete`, and `Retries` are parsed and never consulted. No request is retried today, so the table is a tested contract with no production call site. |
 | F-20 | Hot reload without dropping established connections | ✅ | `TestReloadIncrementsVersionAndSwaps`, `TestReloadRejectsInvalidConfigRetainsPrevious` |
 | F-21 | Rate limiting per source and per pool | ◐ | Sharded limiter implemented and tested; LB wiring uses the admission gate, per-source wiring pending |
 | F-22 | TLS termination on listeners | 🔜 | Config parsed and validated; no cert loading yet |

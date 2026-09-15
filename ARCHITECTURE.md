@@ -348,7 +348,7 @@ demonstrate, and it is fuzzed accordingly.
 | Backend RST mid-stream | read/write error | connection closed, counters decremented, classified `peer_closed` |
 | Accept under FD pressure | `max_conns` admission gate | refuse early with a counter, rather than failing mid-copy |
 | Config typo on reload | validate-then-swap | swap refused, previous snapshot retained, failure counted |
-| Shutdown drain over budget | per-phase deadline | exit code 4 with in-flight counts |
+| Shutdown drain over budget | per-phase deadline | `lifecycle` exits 4 with in-flight counts. **Not yet reachable from the CLI**: `rift lb` waits on the signal context and closes listeners, so in-flight work is dropped rather than drained (ROADMAP Phase 7). |
 | Slow client | write deadline via `http.ResponseController` | stream culled at the deadline, stall counted |
 | Hub unreachable | ship failure | bounded spool; if spool is full, drop with a counter |
 | Malformed DNS response | wire parser caps and pointer rules | discarded as `ClassSecurity`, never crashes |

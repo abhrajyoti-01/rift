@@ -104,7 +104,7 @@ trusted proxies, nothing is trusted.
 Covered by `TestL7ForwardedForAppendOnly` (spoof attempt is discarded) and
 `TestL7TrustedProxyHonorsInboundXFF` (trusted peer is honored).
 
-### 3.4 Retry safety ✅
+### 3.4 Retry safety ◐
 
 Retry eligibility is a closed, method-and-phase table. Retrying a non-idempotent
 request whose bytes already reached the backend is a data-corruption bug, not an
@@ -120,16 +120,30 @@ availability feature.
 Covered by `TestRetryTable`, which asserts every cell including the
 unknown-verb refusal.
 
-### 3.5 Resource exhaustion ✅
+> **Implementation status: ◐** the table is implemented and tested, but the L7
+> proxy does **not** currently call it. `MaxAttempts`, `IdempotentPutDelete`,
+> and the `Retries` counter are parsed into configuration and never consulted,
+> so no request is retried at all. The safety property ("non-idempotent requests
+> are never retried") therefore holds **vacuously** rather than by enforcement.
+> Because the failure mode is "fewer retries than configured", the current
+> behavior is safe; it is not, however, the feature the configuration
+> advertises. Wiring the table into the proxy error path is outstanding work.
+
+### 3.5 Resource exhaustion ◐
 
 - `max_conns` / `max_streams` are admission gates. Over the limit, the
   connection is **refused immediately** — never queued — because queueing
   converts overload into latency instead of a visible refusal.
 - Per-operation read/write deadlines cull stalled peers (slowloris).
-- Per-source and per-pool token buckets bound request rates. A per-connection
-  bucket exists alongside the per-source bucket so a source-rotating flood still
-  consumes a bounded budget.
 - Oversized request bodies are rejected with `413` before any upstream work.
+
+> **Not yet active: per-source and per-pool rate limiting.** The
+> `platform/ratelimit` package implements a sharded, cardinality-bounded token
+> bucket with tests, but **no service imports it**. `lb.pools[].rate_limit` is
+> parsed and validated in configuration and then ignored, so the configured
+> limits have no effect. Rate limiting is currently *not* a defense in depth on
+> any plane. Wiring the limiter into the L4/L7 admission paths is outstanding
+> work.
 
 ### 3.6 Admin plane ✅
 
@@ -294,7 +308,7 @@ Covered by `TestRedactionHidesSecrets` and
 | Open-proxy refusal | `TestL7NeverRoutesByHostHeader` |
 | Smuggling (CL+TE) | `TestL7RejectsAmbiguousFraming` |
 | XFF spoofing | `TestL7ForwardedForAppendOnly` |
-| Retry safety table | `TestRetryTable` |
+| Retry safety table (implemented, not yet wired) | `TestRetryTable` |
 | Admin auth (remote / token) | `TestAdminReloadRequiresAuthFromNonLoopback`, `TestAdminReloadWithToken` |
 | Admin routable bind | `TestAdminPlaneRefusesRoutableBind` |
 | Path traversal | `TestMediaPathTraversal`, `TestSanitizeAssetName` |

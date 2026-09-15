@@ -1,7 +1,7 @@
 # Media fixtures live here.
 #
 # Generate the deterministic test fixture with:
-#     go run ./scripts/makefixture.go
+#     go run ./scripts/makefixture
 #
 # Fixture content is a repeating byte pattern (index % 251) so a range
 # request can be verified against exact file offsets rather than merely

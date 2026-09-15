@@ -143,7 +143,33 @@ lacks ground truth. ✅
 
 ---
 
-## Phase 7 — Observability Completion 🔜
+## Phase 7 — Wiring the Platform Packages ◐
+
+**Objective:** make the platform primitives reachable from the code paths a
+user actually runs. An audit of imports found nine of the thirteen platform
+packages imported by nothing; each of these is implemented, tested, and
+unreachable.
+
+| Deliverable | Status | Why it matters |
+|---|---|---|
+| Wire `retry.Policy` + the L7 closed table into the proxy error path | 🔜 | `retry.max_attempts` and `idempotent_put_delete` are currently ignored |
+| Wire `ratelimit.Sharded` into L4/L7 admission | 🔜 | `rate_limit.*` is currently ignored; rate limiting is not active anywhere |
+| Run services through `lifecycle.App` | 🔜 | `shutdown_timeout` is ignored and exit code 4 is unreachable; in-flight connections are closed rather than drained |
+| Serve `metrics.Registry` on the admin plane | 🔜 | counters exist per component but nothing exports them |
+| Adopt `httpx` for data-plane servers | 🔜 | timeout sets are currently constructed ad hoc per service |
+| Adopt `pool.Executor` where the work unit is not a socket | 🔜 | health checks and DNS queries currently start goroutines directly |
+| Wire `health.Registry` into `/readyz` | 🔜 | LB readiness is not exposed |
+| Structure `logging` calls at every boundary | ◐ | the package exists; call sites are inconsistent |
+| Use `testsupport` fixtures in integration tests | 🔜 | fakes are currently hand-rolled per package |
+
+**Exit criteria:** no platform package is unreachable, and each row has a test
+that exercises the feature through the CLI rather than only through the package
+API. This phase exists because a tested-but-unwired feature is the exact failure
+mode this project's documentation rules are meant to prevent.
+
+---
+
+## Phase 8 — Observability Completion 🔜
 
 | Deliverable | Status |
 |---|---|
@@ -156,7 +182,7 @@ lacks ground truth. ✅
 
 ---
 
-## Phase 8 — Measurement 🔜
+## Phase 9 — Measurement 🔜
 
 **Blocked on a suitable Linux host, not on code.**
 

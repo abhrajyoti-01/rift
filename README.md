@@ -37,7 +37,8 @@ This project draws a hard line between *verified* and *claimed*.
 |---|---|
 | Build, vet, `-race` tests | ✅ green |
 | Security controls | ✅ implemented and red-line tested — see [`SECURITY.md`](SECURITY.md) §9 |
-| LB / DNS / TLS / media functionality | ✅ implemented, tested, and verified running |
+| LB / DNS / TLS / media forwarding | ✅ implemented, tested, and verified running end to end |
+| Retry, rate limiting, graceful drain, `/metrics` | ❌ **implemented and tested, but not wired into the services — see “Implemented but not yet wired” below** |
 | **Performance numbers** | ❌ **none published — no suitable benchmark host yet** |
 
 There are no throughput or latency figures in this repository. Every target in
@@ -112,7 +113,8 @@ go run ./cmd/rift dns hub --config rift.hub.dev.yaml
 go run ./cmd/rift dns node --config rift.example.yaml
 
 # Media server with a live index that rebuilds on SIGHUP.
-# Generate the fixture first: go run ./scripts/makefixture.go
+# Generate the fixture first
+go run ./scripts/makefixture
 go run ./cmd/rift media --config rift.example.yaml
 ```
 
@@ -201,8 +203,6 @@ Implemented and covered by red-line tests (see [`SECURITY.md`](SECURITY.md)):
   `Host` header never selects a destination.
 - **Smuggling defense** — `Content-Length` + `Transfer-Encoding` co-presence is
   rejected before forwarding, and HTTP framing stays stdlib-owned.
-- **Retry safety** — a closed method/phase table; unknown verbs never retry, and
-  POST/PATCH never retry once bytes reached the backend.
 - **Admin plane** — loopback by default; routable binds require an explicit
   opt-in; reload requires authorization with constant-time comparison.
 - **Hub ingest** — mTLS enforced on the listener
@@ -214,6 +214,23 @@ Implemented and covered by red-line tests (see [`SECURITY.md`](SECURITY.md)):
   lookup.
 - **Secrets** — file paths only, never inline; redaction applied before any
   schema is echoed, including diffs.
+
+### Implemented but not yet wired
+
+Honesty requires naming these, because configuration exposes them and they have
+no effect:
+
+| Feature | State |
+|---|---|
+| Retry policy (`retry.max_attempts`, `idempotent_put_delete`) | The closed method/phase table is implemented and tested, but the proxy never calls it. No request is retried. Safe (fewer retries than configured), but not the advertised feature. |
+| Rate limiting (`rate_limit.per_source`, `per_pool`) | The sharded limiter is implemented and tested, but no service imports it. The configured limits are ignored. |
+| Graceful drain (`shutdown_timeout`, exit code 4) | The `lifecycle` package is implemented and tested, but `rift lb` does not use it. In-flight connections are closed rather than drained. |
+| Prometheus `/metrics` | Counters are maintained per component; nothing serves them yet. |
+
+These are the consequences of this project's own rule: a feature counts as
+working only when a test exercises it **through the code path a user actually
+reaches**. Each row above has thorough unit tests and no production call site —
+which is exactly the gap that rule exists to expose.
 
 Known limitations are listed in [`SECURITY.md`](SECURITY.md) §10 — including the
 deliberate absence of media authentication (LAN-only) and the not-yet-enforced

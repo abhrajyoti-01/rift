@@ -127,6 +127,7 @@ Stated so the gaps are visible:
 
 | Gap | Why | Consequence |
 |---|---|---|
+| **Nine platform packages are imported by nothing** | wiring work not done (ROADMAP Phase 7) | `pool`, `retry`, `ratelimit`, `lifecycle`, `metrics`, `logging`, `health`, `httpx`, `testsupport` each have passing tests and **no production call site**. Their features (`retry.max_attempts`, `rate_limit.*`, `shutdown_timeout`) are parsed from config and ignored. Unit tests passing on an unreachable package is not coverage of the product. |
 | Public-internet DNS behaviour | tests must not depend on the network | resolver behaviour against real authorities is unverified in CI |
 | Sustained throughput | needs a dedicated Linux host | no performance claim is made |
 | 2-hour soak | time cost | leak detection is per-test, not project-wide |
@@ -134,6 +135,7 @@ Stated so the gaps are visible:
 | Goroutine-leak assertions project-wide | partial | a few tests assert accounting; `goleak` is not wired into every package |
 | mTLS identity binding | feature not implemented | see `SECURITY.md` §4 |
 | Multi-geography nodes | only loopback multi-node is tested | cross-network behaviour is unverified |
+| Graceful shutdown under load | the CLI does not use `lifecycle` | in-flight connections are closed, not drained; exit 4 is unreachable |
 
 ---
 
