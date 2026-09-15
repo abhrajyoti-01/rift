@@ -3,6 +3,8 @@ package dnsnode
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -28,6 +30,14 @@ type NodeConfig struct {
 	ShipEvery time.Duration // batch age trigger, default 5s
 	ShipSize  int           // batch size trigger, default 512
 	HubURL    string
+	// ClientCertFile and ClientKeyFile let this node authenticate to a hub
+	// whose ingest plane is mTLS. CACertFile is the CA that hub's server
+	// certificate must chain to. All three are optional: a plaintext
+	// development hub needs none of them, and providing a client cert
+	// without a CA (or vice versa) is a configuration error.
+	ClientCertFile string
+	ClientKeyFile  string
+	CACertFile     string
 	SpoolDir  string // offline spool directory; empty disables spooling
 	SpoolMax  int64  // spool byte cap; default 64 MiB
 
@@ -154,18 +164,32 @@ type Node struct {
 	prober  *probe.Prober
 	ring    *Ring
 	client  *http.Client
-	metrics Metrics
+	// clientErr is a deferred construction error (bad mTLS material),
+	// surfaced by Run.
+	clientErr error
+	metrics   Metrics
 
 	spoolMu  sync.Mutex
 	spoolSeq atomic.Uint64
 }
 
 // New builds a node from config.
+//
+// The hub client (including mTLS material, when configured) is built here so
+// any node that ships behaves identically whether it was started by Run or
+// driven directly. A client-construction error is retained and returned by
+// Run rather than being discoverable only on the first failed batch.
 func New(cfg NodeConfig) *Node {
 	cfg = cfg.withDefaults()
 	engines := make([]*resolver.Engine, 0, len(cfg.Resolvers))
 	for _, rc := range cfg.Resolvers {
 		engines = append(engines, resolver.NewEngine(rc, cfg.Now))
+	}
+	client, clientErr := newHubClient(cfg)
+	if clientErr != nil {
+		// Keep a usable client so the node does not nil-panic on shutdown
+		// paths; Run reports the error before any shipping happens.
+		client = &http.Client{Timeout: 10 * time.Second}
 	}
 	return &Node{
 		cfg:     cfg,
@@ -174,9 +198,50 @@ func New(cfg NodeConfig) *Node {
 			View:    dnsmodel.ViewRecursive,
 			Targets: cfg.Targets,
 		}, engines),
-		ring:   NewRing(cfg.RingCap),
-		client: &http.Client{Timeout: 10 * time.Second},
+		ring:      NewRing(cfg.RingCap),
+		client:    client,
+		clientErr: clientErr,
 	}
+}
+
+// newHubClient builds the HTTP client used to ship observations. When the
+// node is configured with a client certificate it presents one, so a node
+// can talk to an mTLS hub. A configuration that provides client material
+// without a CA (or the reverse) is an error rather than a silent downgrade.
+func newHubClient(cfg NodeConfig) (*http.Client, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	if cfg.ClientCertFile == "" && cfg.ClientKeyFile == "" && cfg.CACertFile == "" {
+		return client, nil
+	}
+	if cfg.ClientCertFile == "" || cfg.ClientKeyFile == "" || cfg.CACertFile == "" {
+		return nil, errs.New(errs.ClassConfig, "dns.node",
+			"mTLS requires client_cert_file, client_key_file, and ca_cert_file together")
+	}
+
+	pair, err := tls.LoadX509KeyPair(cfg.ClientCertFile, cfg.ClientKeyFile)
+	if err != nil {
+		return nil, errs.Wrap(err, errs.ClassConfig, "dns.node", "load client key pair")
+	}
+	caPEM, err := os.ReadFile(cfg.CACertFile)
+	if err != nil {
+		return nil, errs.Wrap(err, errs.ClassConfig, "dns.node", "read ca_cert_file")
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(caPEM) {
+		return nil, errs.New(errs.ClassConfig, "dns.node",
+			"ca_cert_file contains no usable certificates: "+cfg.CACertFile)
+	}
+
+	client.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{
+			Certificates: []tls.Certificate{pair},
+			RootCAs:      roots,
+			// The hub's certificate is verified against the configured CA
+			// and its hostname; verification is never skipped.
+			MinVersion: tls.VersionTLS12,
+		},
+	}
+	return client, nil
 }
 
 // Metrics returns the accounting surface.
@@ -190,6 +255,12 @@ func (n *Node) Run(ctx context.Context) error {
 	if n.cfg.HubURL == "" {
 		return errs.New(errs.ClassConfig, "dns.node", "hub url is required")
 	}
+	// Report a deferred client-construction error (bad mTLS material)
+	// before doing any work.
+	if n.clientErr != nil {
+		return n.clientErr
+	}
+
 	var wg sync.WaitGroup
 
 	wg.Add(1)

@@ -190,7 +190,7 @@ does not reimplement them.
                        Observation ──► node ring (fixed capacity, drops counted)
                             │                │
                             │                ▼
-                            │           batch shipper ──HTTP──► hub /v1/ingest
+                            │           batch shipper ──mTLS──► hub /v1/ingest
                             │                                        │
                             │                    ┌───────────────────┼──────────────────┐
                             │                    ▼                   ▼                  ▼

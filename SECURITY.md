@@ -156,25 +156,36 @@ Covered by `TestAdminReloadRequiresAuthFromNonLoopback`,
 | Response replay / mismatch | Transaction ID **and** question section must match before a response is accepted | ✅ |
 | Unbounded memory from hostile keys | Hub window is capped per `(target, view)`; node ring has a fixed capacity | ✅ |
 | Ingest flood | Batch cap, request body cap, per-node rate limiting | ✅ |
-| Plaintext ingest exposure | mTLS required by default; the plaintext opt-in is **refused on a routable bind** | ✅ |
-| Node impersonation | mTLS client certificates with the node identity from the cert | 🔜 Identity is threaded through the API; certificate verification is not yet enforced in `Run`. |
-| Observation forgery by a compromised node | Signed batches | 🔜 Not implemented. |
+| Plaintext ingest exposure | mTLS required by default and **enforced on the listener**; the plaintext opt-in is refused on a routable bind and prints a startup warning | ✅ Tested: `TestHubIngestRequiresClientCertificate`, `TestHubIngestAcceptsValidClientCertificate` |
+| Unauthenticated node posting observations | `RequireAndVerifyClientCert` against the configured CA; a certificate from a foreign CA is rejected at handshake | ✅ Tested: foreign-CA case in the suite above |
+| Observation forgery by a *authenticated* node | Node identity bound from the verified certificate rather than the payload's `node_id` | 🔜 The payload field is still self-declared; certificate identity is not yet propagated into stored observations. |
+| Missing or unusable CA material | Startup failure rather than an empty trust store | ✅ Tested: `TestHubTLSMissingMaterialFailsClosed`, `TestHubTLSRejectsEmptyCA` |
+
+### 4.1 What mTLS now guarantees, and what it does not
 
 ⚠️ **DNS abuse limitation:** RIFT queries only operator-configured targets. It
 cannot be pointed at an arbitrary zone by a remote caller. The amplification
 surface is therefore the operator's own configured query volume, not an
 attacker's.
 
-🔜 **Not yet enforced:** the hub accepts ingest over the configured listener and
-validates the payload, but certificate-identity binding (node ID from cert CN)
-is designed and not yet wired. Until it is, the correct deployment is to run
-ingest on a trusted network or behind a terminating proxy that performs mTLS.
-This is stated rather than implied away.
+**Guaranteed:** an ingest connection is accepted only from a client presenting
+a certificate that chains to the configured `client_ca_file`. An unauthenticated
+client, or one presenting a certificate from a different CA, fails at the TLS
+handshake — verified by tests that assert the connection is refused, not merely
+that a valid client succeeds.
+
+**Not yet guaranteed:** the stored `NodeID` still comes from the JSON payload
+rather than from the certificate's subject. An authenticated node could claim
+another node's identity. This matters only when nodes are semi-trusted; the
+correct posture for now is to issue one certificate per node and treat the CA
+boundary as the trust boundary. The fix is to derive `NodeID` from the verified
+peer certificate, which is a small change to the ingest handler.
 
 For local development, `rift.hub.dev.yaml` sets `allow_plaintext_ingest: true`
-and binds loopback. Validation **refuses that option on any routable bind**, and
-the file carries a header comment saying it is not a deployment template. A
-loopback listener is still unauthenticated to anything else on the same host.
+and binds loopback. Validation **refuses that option on any routable bind**, the
+hub prints a warning naming the port at startup, and `rift dns hub` reports the
+mode as `PLAINTEXT (development only)` in its banner. A loopback listener is
+still unauthenticated to anything else on the same host.
 
 ---
 
@@ -292,7 +303,11 @@ Covered by `TestRedactionHidesSecrets` and
 | TLS SSRF | `TestProbeSSRFGuardRefusesInternal` |
 | Secret redaction | `TestRedactionHidesSecrets`, `TestRedactedDiffNeverLeaksSecrets` |
 | Plaintext ingest on routable bind | `TestHubPlaintextIngestRefusedWhenRoutable` |
-| mTLS required by default | `TestHubRequiresMTLSByDefault` |
+| mTLS required by default | `TestHubRequiresMTLSByDefault`, `TestHubTLSMissingMaterialFailsClosed` |
+| Ingest refuses an unauthenticated client | `TestHubIngestRequiresClientCertificate` |
+| Ingest refuses a foreign-CA client | `TestHubIngestRequiresClientCertificate` (second case) |
+| Ingest accepts a properly signed client | `TestHubIngestAcceptsValidClientCertificate` |
+| Empty trust store rejected | `TestHubTLSRejectsEmptyCA` |
 | Unbounded key cardinality | `TestBoundedCardinalityUnderFlood` |
 | Unbounded DNS window | `TestWindowBoundsMemory` |
 | Ring memory bound | `TestRingMemoryIsBounded` |

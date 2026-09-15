@@ -372,11 +372,15 @@ func TestHubQueryRequiresTarget(t *testing.T) {
 
 func TestHubRunLifecycle(t *testing.T) {
 	dir := t.TempDir()
+	// mTLS is the default; this test exercises the lifecycle, so it opts
+	// into the loopback-only development mode explicitly rather than
+	// generating a PKI.
 	h := New(HubConfig{
-		IngestAddr: "127.0.0.1:0",
-		QueryAddr:  "127.0.0.1:0",
-		DataDir:    dir,
-		WindowKeys: 16,
+		IngestAddr:           "127.0.0.1:0",
+		QueryAddr:            "127.0.0.1:0",
+		AllowPlaintextIngest: true,
+		DataDir:              dir,
+		WindowKeys:           16,
 	})
 	// :0 binds an ephemeral port but Run reports the configured addrs, so
 	// this test asserts the lifecycle rather than the address.

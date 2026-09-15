@@ -3,6 +3,8 @@ package hub
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,13 +26,23 @@ import (
 
 // HubConfig configures the hub.
 type HubConfig struct {
-	IngestAddr        string // ":9001" TLS+mTLS in production
-	QueryAddr         string // ":9002"
-	WindowKeys        int    // per (target,view); default 4096
-	SegmentBytes      int64  // JSONL rotation size; default 128 MiB
-	DataDir           string
-	MinResponding     int
-	ConvergenceWindow time.Duration
+	IngestAddr string // ":9001" mTLS by default
+	QueryAddr  string // ":9002"
+	// ServerCertFile and ServerKeyFile identify this hub; ClientCAFile is
+	// the CA that node client certificates must chain to. All three are
+	// required unless AllowPlaintextIngest is set.
+	ServerCertFile string
+	ServerKeyFile  string
+	ClientCAFile   string
+	// AllowPlaintextIngest disables mTLS on the ingest plane. It exists for
+	// local development; configuration validation refuses it on a routable
+	// bind, and Run prints a warning when it is active.
+	AllowPlaintextIngest bool
+	WindowKeys           int    // per (target,view); default 4096
+	SegmentBytes         int64  // JSONL rotation size; default 128 MiB
+	DataDir              string
+	MinResponding        int
+	ConvergenceWindow    time.Duration
 	// MaxBatch caps observations accepted in one ingest request. A cap is
 	// required: an uncapped batch is a memory-exhaustion primitive.
 	MaxBatch int
@@ -529,7 +541,61 @@ func parseType(s string) (uint16, error) {
 	}
 }
 
+// ingestTLSConfig builds the mTLS configuration for the ingest plane.
+//
+// Requirement level is RequireAndVerifyClientCert: a node without a valid
+// certificate signed by the configured CA cannot post observations at all.
+// The node identity is taken from the verified certificate, so a batch's
+// self-declared node_id cannot be forged by an unauthenticated client.
+func (h *Hub) ingestTLSConfig() (*tls.Config, error) {
+	if h.cfg.ServerCertFile == "" || h.cfg.ServerKeyFile == "" {
+		return nil, errs.New(errs.ClassConfig, "dns.hub",
+			"ingest is mTLS: server_cert_file and server_key_file are required")
+	}
+	if h.cfg.ClientCAFile == "" {
+		return nil, errs.New(errs.ClassConfig, "dns.hub",
+			"ingest is mTLS: client_ca_file is required to verify node certificates")
+	}
+
+	cert, err := tls.LoadX509KeyPair(h.cfg.ServerCertFile, h.cfg.ServerKeyFile)
+	if err != nil {
+		return nil, errs.Wrap(err, errs.ClassConfig, "dns.hub", "load server key pair")
+	}
+	caPEM, err := os.ReadFile(h.cfg.ClientCAFile)
+	if err != nil {
+		return nil, errs.Wrap(err, errs.ClassConfig, "dns.hub", "read client CA")
+	}
+	clientCAs := x509.NewCertPool()
+	if !clientCAs.AppendCertsFromPEM(caPEM) {
+		return nil, errs.New(errs.ClassConfig, "dns.hub",
+			"client_ca_file contains no usable certificates: "+h.cfg.ClientCAFile)
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+		ClientCAs:    clientCAs,
+		MinVersion:   tls.VersionTLS12,
+	}, nil
+}
+
+// logPlaintextWarning announces the development-only plaintext mode on
+// stderr, so it is visible in a terminal and in captured service output
+// rather than merely present in a config file.
+func (h *Hub) logPlaintextWarning(addr string) {
+	fmt.Fprintf(os.Stderr,
+		"rift: WARNING: ingest on %s is PLAINTEXT and unauthenticated; "+
+			"any process that can reach this port can post observations. "+
+			"This mode is for local development only (allow_plaintext_ingest).\n", addr)
+}
+
 // Run serves ingest and query planes until ctx is canceled.
+//
+// The ingest plane is mTLS unless the configuration explicitly opts into
+// plaintext on a loopback bind. The certificate material named in the
+// configuration is actually loaded and enforced here — requiring the fields
+// in validation while serving plaintext would be a documented control that
+// does not exist.
 func (h *Hub) Run(ctx context.Context) error {
 	if h.cfg.DataDir == "" {
 		return errs.New(errs.ClassConfig, "dns.hub", "data_dir is required")
@@ -543,10 +609,27 @@ func (h *Hub) Run(ctx context.Context) error {
 		queryAddr = "127.0.0.1:9002"
 	}
 
-	ingestLn, err := net.Listen("tcp", ingestAddr)
-	if err != nil {
-		return errs.Wrap(err, errs.ClassResource, "dns.hub", "bind ingest "+ingestAddr)
+	var ingestLn net.Listener
+	var err error
+	if h.cfg.AllowPlaintextIngest {
+		// Development path. Validation has already refused this on any
+		// routable bind, so the listener cannot be reachable off-host.
+		ingestLn, err = net.Listen("tcp", ingestAddr)
+		if err != nil {
+			return errs.Wrap(err, errs.ClassResource, "dns.hub", "bind ingest "+ingestAddr)
+		}
+		h.logPlaintextWarning(ingestAddr)
+	} else {
+		tlsCfg, terr := h.ingestTLSConfig()
+		if terr != nil {
+			return terr
+		}
+		ingestLn, err = tls.Listen("tcp", ingestAddr, tlsCfg)
+		if err != nil {
+			return errs.Wrap(err, errs.ClassResource, "dns.hub", "bind ingest (tls) "+ingestAddr)
+		}
 	}
+
 	queryLn, err := net.Listen("tcp", queryAddr)
 	if err != nil {
 		ingestLn.Close()

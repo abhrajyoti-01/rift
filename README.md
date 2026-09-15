@@ -205,6 +205,11 @@ Implemented and covered by red-line tests (see [`SECURITY.md`](SECURITY.md)):
   POST/PATCH never retry once bytes reached the backend.
 - **Admin plane** — loopback by default; routable binds require an explicit
   opt-in; reload requires authorization with constant-time comparison.
+- **Hub ingest** — mTLS enforced on the listener
+  (`RequireAndVerifyClientCert`): an unauthenticated client, or one whose
+  certificate chains to a different CA, fails at the handshake. Node identity
+  binding from the certificate is the remaining gap, stated in
+  [`SECURITY.md`](SECURITY.md) §4.1.
 - **Path traversal** — refused on the raw string, never normalized into a valid
   lookup.
 - **Secrets** — file paths only, never inline; redaction applied before any

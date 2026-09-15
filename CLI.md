@@ -140,14 +140,36 @@ $ rift dns node --config rift.example.yaml
 dns node: test-node (test-lab) → http://127.0.0.1:19001
 ```
 
+When the hub's ingest plane is mTLS, the node presents a client certificate.
+All three fields are required together; supplying only some of them is a startup
+error rather than a silent downgrade:
+
+```yaml
+dns:
+  hub:
+    url: "https://hub.internal:9001"
+    client_cert_file: /etc/rift/node.crt
+    client_key_file:  /etc/rift/node.key
+    ca_cert_file:     /etc/rift/hub-ca.crt
+```
+
+The hub's certificate is verified against `ca_cert_file`; verification is never
+skipped. If the hub presents an untrusted certificate, shipping fails and the
+batch is spooled rather than sent to an unknown peer.
+
 ### `rift dns hub`
 
 Runs the aggregation hub: mTLS ingest plane and query plane.
 
 ```
 $ rift dns hub --config rift.hub.dev.yaml
-dns hub: ingest 127.0.0.1:19001 query 127.0.0.1:19002 data ./bench/results/hubdata
+dns hub: ingest 127.0.0.1:19001 [PLAINTEXT (development only)] query 127.0.0.1:19002 data ./bench/results/hubdata
 ```
+
+The banner states the ingest mode. A production hub reports `[mTLS]` and
+requires `server_cert_file`, `server_key_file`, and `client_ca_file`; the
+plaintext mode is refused on a routable bind and prints a warning naming the
+port.
 
 Query endpoints:
 
