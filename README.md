@@ -1,143 +1,241 @@
-# RIFT — High-Performance Network Operations Platform
+<div align="center">
 
-One Go module. One binary. Three real network services sharing one platform
-layer, built to be measured, not to look impressive.
+# RIFT
 
-> **Status: specification complete; platform security & correctness core
-> implemented and green.** The 15 documents are internally consistent and
-> normative. Implemented and tested (`-race` clean, hermetic tests):
-> `errs` taxonomy, `netx` SSRF Guard (red-line T-50 suite), `pool`
-> bounded executor, `ratelimit` sharded limiter with bounded cardinality,
-> `circuit` breaker, `retry` policy, `lifecycle` ordered drain engine
-> (exit-4 contract), and all three LB pickers (0-alloc asserted, NFR-2).
-> Remaining subsystems (LB forwarding, DNS wire, TLS probe, media, config,
-> bench) are pinned contracts with honest phase-citing stubs — no fake
-> behavior anywhere. Production-grade certification stays gated on ROADMAP
-> v1 exit criteria (all FRs green, all NFRs *measured*).
+**A high-performance network operations platform in Go**
+
+A load balancer, a DNS and TLS monitoring system, and a media server —
+built around one shared platform layer, and measured rather than asserted.
+
+[![Go](https://img.shields.io/badge/Go-1.25.5-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-race%20clean-brightgreen)](#testing)
+[![Status](https://img.shields.io/badge/status-verified%20%2F%20unmeasured%20perf-orange)](#status)
+
+</div>
 
 ---
 
-## What RIFT Is
+## What this is
 
-| Component | What it really does | Why it exists |
-|---|---|---|
-| **Load balancer** (`rift lb`) | L4 TCP proxy (splice path + pooled copy), UDP session proxy, L7 HTTP reverse proxy; round-robin / smooth weighted RR / least-connections pickers; active health with rise/fall; per-conn/read/write/idle timeouts; token-bucket rate limits; hot reload with zero dropped connections | Makes the cost of each proxy mechanism individually measurable (per-pick latency, allocs/op, distribution) |
-| **DNS + TLS monitor** (`rift dns`, `rift tls`) | Own RFC 1035 wire engine (TTL, rcode, TC, RD=0 — stdlib returns none of these); recursive + authoritative views; bounded-loss node with spool; mTLS hub with JSONL segments; TLS chain/hostname/expiry findings from a closed code set | Honest propagation observation across *observed* resolvers — never a "propagated worldwide" verdict |
-| **Media server** (`rift media`) | RFC 7233 single-range serving, strong ETags, If-Range; sendfile + fadvise path with buffered alternative; global/per-client limits; per-stream accounting | High-bandwidth LAN delivery where the bottleneck is disk/NIC, not the server |
+RIFT is one Go module producing one binary that runs three network services:
 
-Shared platform (one dependency sink, mechanically one-way): `config`
-(YAML, validate/redact/diff/reload), `lifecycle` (phases, drain budgets),
-`errs` (7-class taxonomy driving log level + metric label + retry
-eligibility), `netx` (listeners, SSRF `Guard` at the dial), `pool`,
-`ratelimit`, `circuit`, `retry`, `logging`, `metrics`, `health`, `httpx`,
-`testsupport` (real-socket fakes, fault injection, goleak).
-
-## Honest-Limits Summary (the parts most projects fake)
-
-- **DNS propagation is observed, not known.** RIFT samples configured
-  resolvers from its nodes' vantage points. It distinguishes authoritative
-  vs recursive state, records TTL/rcode/latency per observation, and
-  **refuses** to emit any "propagated worldwide" state. Client-facing state
-  is a documented non-claim.
-- **Rebuffer is a client-side event.** Server logs cannot see it. RIFT ships
-  `playersim` — a playback-clock client model — and reports server-side
-  and client-side numbers separately, never merged.
-- **WSL2 distorts absolute numbers.** Throughput/latency claims are ratios
-  against same-host measured ceilings (iperf3/fio), with the environment
-  card attached. Absolute numbers are re-measured per host.
-- **No number is invented.** Every performance target cell is empty until
-  the named experiment or scenario fills it from a committed result file.
-  "Zero buffering" is a banned phrase; "zero-copy" only when E1's
-  `strace -c` shows splice on the reference host.
-- **Deferred features are named.** QUIC, HLS, DNSSEC, geographic fleet,
-  OTel tracing, kernel bypass — each is a ROADMAP milestone with a
-  precondition, not a stub pretending to exist.
-
-## Documentation Map (all 15, normative)
-
-| Document | Authority over |
+| Component | What it actually does |
 |---|---|
-| `PRD.md` | Requirements: FR/NFR/G/P IDs |
-| `ARCHITECTURE.md` | Boundaries, dependency direction, data flow (oracle) |
-| `TECHNICAL_SPEC.md` | Identifiers, types, algorithms, concurrency (oracle) |
-| `LOAD_BALANCER_SPEC.md` | LB behaviour, retry table, concurrency analysis |
-| `DNS_SSL_TRACKER_SPEC.md` | Wire engine, views, classifier, TLS findings |
-| `MEDIA_SERVER_SPEC.md` | RFC 7233 matrix, copy paths, admission |
-| `PERFORMANCE_SPEC.md` | Experiments E1–E7, KPIs, statistics, Nginx parity |
-| `OBSERVABILITY_SPEC.md` | Metric inventory, closed label sets, dashboards |
-| `TESTING_SPEC.md` | T-1x..T-99, fuzz, soak, synctest, traceability |
-| `SECURITY_SPEC.md` | Trust boundaries, SSRF guard, threat tables |
-| `API_SPEC.md` | Hub/admin/media HTTP contracts, problem-details |
-| `CLI_SPEC.md` | Command tree, exit codes, one-shot tools |
-| `BENCHMARK_REPORT_TEMPLATE.md` | Report form, anti-overclaim audit |
-| `ROADMAP.md` | Phases 0–6, milestones M1+, v1 exit criteria |
-| `README.md` | This file |
+| **Load balancer** | TCP proxying with admission control and half-close handling; UDP proxying with per-session backend affinity; HTTP reverse proxying with an owned transport. Three pickers, active health checks with hysteresis, a closed retry-safety table, and hot reload that never drops established connections. |
+| **DNS & TLS monitoring** | Its own RFC 1035 wire engine (the stdlib exposes no TTLs), a per-resolver engine with UDP→TCP fallback, a six-state propagation classifier that refuses to claim global propagation, a node→hub pipeline with bounded memory and counted drops, and a TLS prober that reports findings instead of aborting on them. |
+| **Media server** | RFC 7233 single-range serving with strong ETags, `If-Range`, admission limits, and memory per stream bounded by configuration rather than file size. |
 
-## Requirements vs Claims Ledger (evidence status)
+The load balancer, DNS node, and media server have each been **verified running
+end to end** against real backends, real resolvers, and live TLS endpoints.
 
-| Claim type | Status |
+## Status
+
+This project draws a hard line between *verified* and *claimed*.
+
+| Area | Status |
 |---|---|
-| Architecture/specification | **Evidenced** — this document set |
-| Working software | **Not yet** — Phase 0 starts implementation; nothing runnable exists |
-| Performance numbers | **Not yet** — `[E-n]` cells empty by design until experiments run |
-| Production readiness | **Not claimed** — gated on ROADMAP v1 criteria |
+| Build, vet, `-race` tests | ✅ green |
+| Security controls | ✅ implemented and red-line tested — see [`SECURITY.md`](SECURITY.md) §9 |
+| LB / DNS / TLS / media functionality | ✅ implemented, tested, and verified running |
+| **Performance numbers** | ❌ **none published — no suitable benchmark host yet** |
 
-## Quickstart (will work once Phase 0–1 land; kept honest)
+There are no throughput or latency figures in this repository. Every target in
+[`PERFORMANCE.md`](PERFORMANCE.md) is marked `[unmeasured]`, and the benchmark
+tooling actively refuses to produce a report without an environment card:
+
+```console
+$ rift bench report nosuchdir
+rift: bench.report: refusing to produce a report without an environment card
+```
+
+That refusal is the point. A number without its environment is not a fact.
+
+## Quick start
 
 ```bash
-git clone https://github.com/rift/rift && cd rift
-go build ./...        # compiles the full skeleton (pure stdlib, no deps yet)
-go test ./...         # errs taxonomy suite green under -race
+git clone https://github.com/abhrajyoti-01/rift.git
+cd rift
+
+go build ./...
+go vet ./...
+go test -race ./...
+
 go run ./cmd/rift version
-go run ./cmd/rift lb  # honestly refuses: Phase 2 not implemented (ROADMAP.md)
 ```
 
-Service subcommands come alive as their ROADMAP phases land: `bench env`
-(Phase 0), `init`/`config validate` (Phase 1), `lb` (Phase 2), `dns`/`tls`
-(Phase 3), `media` (Phase 4), full `bench` (Phase 5).
+Write and validate a configuration:
 
-## Toolchain & Environment
-
-- Go 1.25.5 (module pins `go 1.25.5`; no toolchain upgrade is silently
-  accepted — `x/sys@v0.47.0` requires ≥1.25.0 and is the ceiling test).
-- Development: Windows. Performance work: WSL2 Ubuntu (default distro,
-  verified present). Target: Linux servers. Windows perf claims: none.
-- Admitted dependencies (whole set, with reasons — ARCHITECTURE §8):
-  `gopkg.in/yaml.v3`, `golang.org/x/sys`, `prometheus/client_golang`,
-  `hdrhistogram-go` (provisional on E6), `go.uber.org/goleak`.
-- Docker: not installed on the dev host (verified); WSL2 provisioning is a
-  Phase 0 task, and compose topology is marked unexercised until then.
-
-## Repository Layout (target; `experiments/` populates first)
-
-```
-cmd/rift/             composition root
-internal/platform/    errs config logging lifecycle health metrics httpx netx
-                     pool ratelimit circuit retry testsupport
-internal/lb/          model picker health l4 udp l7 control
-internal/dnsmon/      model wire resolver probe node hub
-internal/tlsmon/      model probe
-internal/media/       model server
-internal/bench/       env loadgen playersim harness
-experiments/          E1..E7 Phase-0 toolchain probes (first code)
-bench/                scenarios/ baselines/ results/ fixtures/
-deploy/               docker/ compose/ grafana/ prometheus/ systemd/ nginx/
-docs/                 appendices
+```bash
+go run ./cmd/rift init --config rift.yaml
+go run ./cmd/rift config validate --config rift.yaml
 ```
 
-## Security Posture (summary; SECURITY_SPEC is authoritative)
+## Try it against real services
 
-SSRF enforced once at the dialer (`netx.Guard`) with every-resolved-address
-checking and no re-resolution (kills rebinding); LB never proxies to
-client-chosen destinations (open-proxy boundary); per-resolver caps and
-breakers bound DNS amplification; mTLS on hub ingest; admin plane loopback by
-default with refuse-to-start on routable bind without explicit opt-in;
-secrets never inline, redaction on every echo path; closed metric-label and
-log-field sets as resource-exhaustion defense.
+Each of these performs a genuine network operation:
 
-## License / Contribution
+```bash
+# Real DNS query to a real resolver
+go run ./cmd/rift dns query example.com --type A --resolver 1.1.1.1:53
 
-Not yet decided (deliberate: license choice belongs to the owner, and a
-placeholder license is worse than an honest absence). Contribution model:
-docs-first — every PR touches the relevant spec in the same commit as the
-code, or it does not merge.
+# Real TLS handshake and chain inspection
+go run ./cmd/rift tls check example.com --floor 1.2
+
+# Real environment card for the current host
+go run ./cmd/rift bench env
+```
+
+Example TLS output:
+
+```
+target example.com:443
+protocol TLS 1.3  cipher TLS_AES_128_GCM_SHA256
+subject  CN=example.com
+issuer   CN=Cloudflare TLS Issuing ECC CA 3,O=SSL Corporation,C=US
+expires  2026-10-27T22:17:21Z (42 days)
+san      example.com
+san      *.example.com
+findings none
+```
+
+## Run the services
+
+```bash
+# Load balancer: TCP, UDP, and HTTP listeners plus an admin plane
+go run ./cmd/rift lb --config rift.yaml
+
+# DNS monitoring: hub first, then any number of nodes
+go run ./cmd/rift dns hub --config rift.hub.yaml
+go run ./cmd/rift dns node --config rift.yaml
+
+# Media server with a live index that rebuilds on SIGHUP
+go run ./cmd/rift media --config rift.yaml
+```
+
+Verified end to end:
+
+```console
+$ curl http://127.0.0.1:8080/hello          # → through the LB
+backend-ok path=/hello
+
+$ curl -r 100-199 -D- -o/dev/null \
+    http://127.0.0.1:8081/v1/media/sample.bin
+HTTP/1.1 206 Partial Content
+Accept-Ranges: bytes
+Content-Length: 100
+Content-Range: bytes 100-199/1048576
+Etag: "100000-18d58fb3667e0da0"
+
+$ curl 'http://127.0.0.1:19002/v1/observations?target=example.com.&type=A'
+{"count":1,"observations":[{"NodeID":"test-node","Resolver":"1.1.1.1:53",
+ "Answers":[{"TTL":136,"Data":"104.20.23.154"}],"Latency":31656000}]}
+```
+
+## Architecture at a glance
+
+```
+                        ┌──────────────────────────────┐
+                        │          cmd/rift            │
+                        │  composition root only       │
+                        └──┬────────┬────────┬─────────┘
+                           │        │        │
+                  ┌────────▼──┐ ┌───▼────┐ ┌─▼───────┐ ──────────┐
+                  │     lb    │ │ dnsmon │ │ tlsmon  │ │  media   │
+                  │ l4 udp l7 │ │node hub│ │ probe   │ │ server   │
+                  │picker hlth│ │resolver│ │         │ │          │
+                  │  control  │ │  wire  │ │         │ │          │
+                  ─────┬─────┘ ───┬────┘ ────┬──── └────┬─────┘
+                        │           │           │           │
+   ═════════════════════▼═══════════▼═══════════▼═══════════▼═════════
+                     internal/platform  (dependency sink)
+     errs · config · netx(SSRF guard) · pool · ratelimit · circuit
+     retry · lifecycle · logging · metrics · health · httpx
+   ════════════════════════════════════════════════════════════════════
+```
+
+Subsystems never import each other; `cmd/rift` wires them. Full detail,
+including data-flow diagrams and the concurrency model, is in
+[`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Component boundaries, data flow, concurrency, failure modes |
+| [`PRD.md`](PRD.md) | Requirements with an honest status for every one |
+| [`SECURITY.md`](SECURITY.md) | Threat model, trust boundaries, control status, limitations |
+| [`API.md`](API.md) | HTTP contracts with real request and response bodies |
+| [`CLI.md`](CLI.md) | Every command, every flag, every exit code |
+| [`OBSERVABILITY.md`](OBSERVABILITY.md) | Metrics, logging, health, dashboards |
+| [`TESTING.md`](TESTING.md) | Test strategy and the defects the tests caught |
+| [`PERFORMANCE.md`](PERFORMANCE.md) | Benchmark methodology and why there are no numbers yet |
+| [`ROADMAP.md`](ROADMAP.md) | Phases, milestones, definition of done |
+
+## Repository layout
+
+```
+cmd/rift/                 CLI entry point and wiring
+internal/platform/        shared substrate (errs, config, netx, pool, ...)
+internal/lb/              model, picker, health, l4, udp, l7, control
+internal/dnsmon/          wire, resolver, probe, model, node, hub
+internal/tlsmon/          model, probe
+internal/media/           model, server
+internal/bench/           env, loadgen, playersim, harness
+bench/scenarios/          versioned load definitions
+experiments/              toolchain probe programs
+scripts/                  local development helpers
+```
+
+## Security highlights
+
+Implemented and covered by red-line tests (see [`SECURITY.md`](SECURITY.md)):
+
+- **SSRF guard at the dialer** — resolves once, checks *every* resolved address,
+  dials the literal IP. Multi-answer hostnames are refused entirely; there is no
+  re-resolution window.
+- **No open proxy** — the upstream comes only from the configured pool; a forged
+  `Host` header never selects a destination.
+- **Smuggling defense** — `Content-Length` + `Transfer-Encoding` co-presence is
+  rejected before forwarding, and HTTP framing stays stdlib-owned.
+- **Retry safety** — a closed method/phase table; unknown verbs never retry, and
+  POST/PATCH never retry once bytes reached the backend.
+- **Admin plane** — loopback by default; routable binds require an explicit
+  opt-in; reload requires authorization with constant-time comparison.
+- **Path traversal** — refused on the raw string, never normalized into a valid
+  lookup.
+- **Secrets** — file paths only, never inline; redaction applied before any
+  schema is echoed, including diffs.
+
+Known limitations are listed in [`SECURITY.md`](SECURITY.md) §10 — including the
+deliberate absence of media authentication (LAN-only) and the not-yet-enforced
+mTLS identity binding for hub ingest.
+
+## Testing
+
+```bash
+go build ./... && go vet ./... && go test -race ./...
+```
+
+Tests use real loopback sockets rather than mocks and never depend on the public
+internet. [`TESTING.md`](TESTING.md) §4 lists the real defects these tests found
+during development, including an absolute-path traversal bug, a breaker state
+machine that could never recover, a shutdown path that silently dropped data,
+and a TLS finding that masked a hostname mismatch.
+
+## Requirements
+
+- Go 1.25.5 or newer
+- Linux for production and for all performance work
+- Windows and macOS for development and functional tests
+
+## License
+
+Apache License 2.0 — see [`LICENSE`](LICENSE).
+
+---
+
+<div align="center">
+<sub>Everything in this repository is either verified or labelled as unverified.
+There is no third category.</sub>
+</div>

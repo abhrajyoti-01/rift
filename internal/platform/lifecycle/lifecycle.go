@@ -1,7 +1,3 @@
-// Package lifecycle owns ordered service startup and the fixed shutdown
-// ordering (TECHNICAL_SPEC §3, §13): stop accepting → drain in-flight →
-// flush → exit. Budgets split top-down from the configured total; a fired
-// drain budget exits 4 via ErrDrainExceeded — visible failure, never a hang.
 package lifecycle
 
 import (
@@ -14,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rift/rift/internal/platform/errs"
+	"github.com/abhrajyoti-01/rift/internal/platform/errs"
 )
 
 // Phase is the observable service lifecycle state.
@@ -62,13 +58,13 @@ type App struct {
 	services []Service
 	phase    atomic.Int32
 	mu       sync.Mutex
-	// shutdownTotal is the config-driven budget (default 15s; spec
-	// TECHNICAL_SPEC §3). Read once at shutdown time.
+	// shutdownTotal is the config-driven shutdown budget. Read once at
+	// shutdown time.
 	shutdownTotal time.Duration
 }
 
-// New builds an App over services, started in order, stopped in reverse.
-// The default shutdown budget is 15s per the spec.
+// New builds an App over services, started in order and stopped in reverse.
+// The default shutdown budget is 15s.
 func New(name string, services ...Service) *App {
 	a := &App{name: name, services: services, shutdownTotal: 15 * time.Second}
 	a.phase.Store(int32(PhaseInit))
@@ -95,7 +91,7 @@ func (a *App) setPhase(p Phase) {
 	a.phase.Store(int32(p))
 }
 
-// ShutdownBudget splits the total budget T per TECHNICAL_SPEC §3:
+// ShutdownBudget splits the total shutdown budget T:
 // stop-accepting is immediate; drain receives T − 1s − 5%; flush receives
 // the remainder.
 func ShutdownBudget(total time.Duration) (drain, flush time.Duration) {
@@ -125,7 +121,7 @@ func (a *App) Run(ctx context.Context) error {
 	})
 }
 
-// Flusher is the optional post-drain hook (TECHNICAL_SPEC §13 step 3):
+// Flusher is the optional post-drain hook:
 // services holding segment writers or metric buffers implement Flush to
 // durably close them within the flush window after Stop returned.
 type Flusher interface {
@@ -160,9 +156,8 @@ func (a *App) RunWithSignal(ctx context.Context, signalSource func() <-chan os.S
 	case <-sig:
 	}
 
-	// Ordered shutdown (TECHNICAL_SPEC §13): Stop each service exactly
-	// once, reverse order, within the drain budget; then optional
-	// Flusher services get the flush window.
+	// Stop each service exactly once in reverse order within the drain budget,
+	// then flush services that implement Flusher.
 	a.setPhase(PhaseDraining)
 	a.mu.Lock()
 	total := a.shutdownTotal

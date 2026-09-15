@@ -1,7 +1,3 @@
-// Package pool provides bounded executors for work whose unit is not a
-// socket (TECHNICAL_SPEC §2.1). Submit never blocks: ErrFull is the
-// visible backpressure decision. Close drains within the ctx budget and
-// reports work still enqueued — never silently dropped.
 package pool
 
 import (
@@ -136,7 +132,7 @@ func (e *Executor[T]) Close(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		// Budget fired (typically an fn still running): count buffered
-		// leftovers for the honest report. len() on a closed channel is
+		// leftovers for the error report. len() on a closed channel is
 		// valid and returns the buffered count.
 		var leftover int
 		for _, q := range queues {

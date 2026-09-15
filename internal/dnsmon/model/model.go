@@ -1,19 +1,12 @@
-// Package model holds the DNS monitoring data contracts (TECHNICAL_SPEC
-// §5.4): Target, View, Observation, Answer, PropagationState. The
-// classifier distinguishes authoritative and recursive observation classes
-// and never emits a "propagated worldwide" verdict — enforced by T-51.
 package dnsmodel
 
 import (
 	"time"
 
-	"github.com/rift/rift/internal/dnsmon/wire"
-	"github.com/rift/rift/internal/platform/errs"
+	"github.com/abhrajyoti-01/rift/internal/dnsmon/wire"
+	"github.com/abhrajyoti-01/rift/internal/platform/errs"
 )
 
-// View is the observation class. The two implemented views are labeled
-// separately on dashboards and never merged; client-facing state is a
-// documented non-claim (DNS_SSL_TRACKER_SPEC §1).
 type View uint8
 
 const (
@@ -42,7 +35,7 @@ type Answer struct {
 
 // Observation is one node's one query result. Fingerprint (the comparison
 // unit) is the sorted Answer.Data set — TTL deliberately excluded so TTL
-// decay alone never reads as propagation divergence (FR-34).
+// decay alone never reads as propagation divergence.
 type Observation struct {
 	NodeID    string
 	View      View

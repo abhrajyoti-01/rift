@@ -1,0 +1,12 @@
+{
+  "name": "media.range.4k",
+  "tool": "rift",
+  "target": "http://127.0.0.1:8081/v1/media/sample.bin",
+  "duration_ms": 30000,
+  "warmup_ms": 3000,
+  "loop": "open",
+  "conns": 10,
+  "rate_per_sec": 400,
+  "method": "GET",
+  "keep_alive_fraction": 1.0
+}

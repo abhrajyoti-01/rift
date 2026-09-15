@@ -1,18 +1,3 @@
-// Package netx provides listeners and the Guard — the single outbound dial
-// authorization path (TECHNICAL_SPEC §9). Subsystems dial through
-// Guard.DialContext or they do not dial (CI depguard T-35).
-//
-// Guard semantics: resolve once, check EVERY resolved address against the
-// deny-set, then dial the literal IP — closing the rebinding window. A
-// hostname resolving to even one denied address is refused entirely
-// (split-horizon DNS is a bypass signal, not a curve to route around).
-// Denied dials are ClassSecurity, warn-logged by the caller, never
-// retried.
-//
-// TLS/SNI preservation: Guard dials TCP only. Callers doing TLS wrap the
-// returned conn with tls.Client(conn, &tls.Config{ServerName: <original
-// host>}) so the handshake name is the operator's hostname, not the
-// guarded literal IP.
 package netx
 
 import (
@@ -23,25 +8,21 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/rift/rift/internal/platform/errs"
+	"github.com/abhrajyoti-01/rift/internal/platform/errs"
 )
 
-// ListenOptions tunes listener construction. ReusePort is gated on
-// experiment E2 (UD-3): requesting it before E2 admits it is a clear
-// refusal, not a silent no-op.
+// ListenOptions tunes listener construction. ReusePort is not currently
+// supported and returns a configuration error when requested.
 type ListenOptions struct {
 	ReusePort bool
 	Backlog   int // advisory; honored where the platform allows
 	KeepAlive time.Duration
 }
 
-// Listen builds a net.Listener. SO_REUSEPORT is deliberately NOT wired yet:
-// PERFORMANCE_SPEC gates it on E2's accept-scaling result, so requesting it
-// fails loudly with the gating decision named.
+// Listen builds a net.Listener.
 func Listen(ctx context.Context, network, addr string, o ListenOptions) (net.Listener, error) {
 	if o.ReusePort {
-		return nil, errs.New(errs.ClassConfig, "netx.listen",
-			"SO_REUSEPORT is not admitted until experiment E2 (UD-3) measures its benefit; see PERFORMANCE_SPEC §3")
+		return nil, errs.New(errs.ClassConfig, "netx.listen", "SO_REUSEPORT is not supported")
 	}
 	lc := net.ListenConfig{KeepAlive: o.KeepAlive}
 	l, err := lc.Listen(ctx, network, addr)
@@ -51,13 +32,30 @@ func Listen(ctx context.Context, network, addr string, o ListenOptions) (net.Lis
 	return l, nil
 }
 
+// ListenUDP binds a UDP socket for a data-plane listener. SO_REUSEPORT is
+// deliberately not wired: it is gated on the accept-scaling experiment, and
+// silently ignoring the option would hide that.
+func ListenUDP(ctx context.Context, network, addr string) (*net.UDPConn, error) {
+	lc := net.ListenConfig{}
+	pc, err := lc.ListenPacket(ctx, network, addr)
+	if err != nil {
+		return nil, errs.Wrap(err, errs.ClassResource, "netx.listenudp", "bind failed: "+addr)
+	}
+	uc, ok := pc.(*net.UDPConn)
+	if !ok {
+		pc.Close()
+		return nil, errs.New(errs.ClassResource, "netx.listenudp", "not a UDP socket: "+addr)
+	}
+	return uc, nil
+}
+
 // denyRule pairs a prefix with the name used in refusal messages and logs.
 type denyRule struct {
 	prefix netip.Prefix
 	name   string
 }
 
-// DefaultDenySet returns the SECURITY_SPEC §2 deny-set: loopback, private
+// DefaultDenySet returns the SSRF deny-set: loopback, private
 // v4 + ULA v6, link-local (incl. cloud metadata), multicast, unspecified,
 // reserved, and CGNAT shared space.
 func DefaultDenySet() []netip.Prefix {

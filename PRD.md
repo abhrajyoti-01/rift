@@ -1,201 +1,200 @@
-# PRD.md — RIFT Product Requirements Document
+# RIFT — Product Requirements
 
-Status: **Revision A — normative for requirement IDs**. Functional requirements
-(`FR-nn`), non-functional requirements (`NFR-nn`), goals (`G-n`), and problems
-(`P-n`) defined here are cited by stable ID from every other document. Scope
-decisions: multi-resolver node + real node protocol; progressive HTTP media with
-byte-range; WSL2+Docker benchmark environment; `rift` binary, module
-`github.com/rift/rift`. Oracles: `ARCHITECTURE.md` (boundaries), `TECHNICAL_SPEC.md`
-(identifiers). Toolchain: Go 1.25.5.
+## Executive Summary
 
----
+RIFT is a Go network operations platform: one module, one binary, three network
+services sharing one platform layer. It exists to demonstrate — with
+measurements rather than assertions — how high-performance network software is
+actually built: where the syscalls go, what a routing decision costs, how a
+monitor degrades honestly, and what bounds media throughput.
 
-## 1. Executive Summary
+The guiding constraint is **measurement before claim**. Every performance
+target in this repository is either backed by a committed benchmark or marked as
+not yet measured. There are no invented numbers, and no feature is described as
+working when it is not.
 
-RIFT is one Go module producing one binary with three network services sharing
-one platform layer: an L4/L7 load balancer, a multi-resolver DNS + TLS
-certificate monitoring system (node + hub), and a high-throughput byte-range
-media server. The organizing principle is **measurement before claim**: every
-optimization is gated behind a benchmark or profile, every performance target is
-stated as a measurable quantity with a verification method, and every report
-carries an environment card or does not exist.
+## Problem Statement
 
-The three components are chosen because they stress different parts of the
-stack: the LB is a syscall-and-allocation problem, DNS/TLS is a
-latency-distribution and untrusted-parser problem, media is a
-sustained-bandwidth and backpressure problem. The platform layer exists because
-three real consumers prevent single-consumer abstractions from calcifying.
+Three concrete gaps motivate the component selection:
 
-Development runs on Windows (Go 1.25.5); all performance work runs in WSL2
-Ubuntu. Docker is not yet installed on the host — provisioning it is a Phase 0
-task (`ROADMAP.md`), and no container-based claim is made until it exists.
+- **P1 — Proxy opacity.** Generic proxies do not expose the cost of individual
+  routing decisions. "Use least-connections" is advice; the per-pick latency
+  and allocation count of least-connections at a thousand backends is
+  knowledge. RIFT instruments the decision itself.
+- **P2 — Propagation conflation.** DNS "propagation" is spoken of as one state
+  when it is at least three: authoritative state, recursive-resolver state, and
+  observed client-facing state. Tools that merge them produce misleading
+  dashboards. RIFT records the observation class on every sample and provides
+  no mechanism to emit a single "propagated worldwide" verdict.
+- **P3 — Uninstrumented playback.** Media throughput is usually reported from
+  the server's point of view, but a rebuffer is a client-side event invisible
+  in server logs. RIFT ships a player-model client so stalls are measured where
+  they happen, and server-side and client-side numbers are reported separately.
 
-## 2. Problem Statement
+## Goals
 
-- **P1 — Proxy opacity.** Generic proxies (Nginx et al.) do not expose the cost
-  of individual routing decisions. "Use least_conn" is advice; the per-pick
-  latency and allocation cost of `least_conn` at 1000 backends is knowledge.
-  RIFT makes each mechanism measurable and comparable under a controlled A/B.
-- **P2 — Propagation conflation.** "DNS propagation" is spoken of as one state.
-  It is at least three: authoritative state, recursive-resolver cached state,
-  and observed client-facing state. Tools that merge them produce misleading
-  dashboards. RIFT records the observation class on every sample and refuses
-  to emit a single "propagated worldwide" verdict.
-- **P3 — Uninstrumented playback claims.** Media throughput is usually reported
-  from the server side, but a rebuffer is a client-side event invisible in
-  server logs. RIFT ships a player-model client (`bench/playersim`) with a
-  playback clock, so startup latency and stall events are measured where they
-  occur, and server-side metrics are never quoted as client experience.
-
-## 3. Goals
-
-| ID | Goal | Verified by |
+| # | Goal | How it is verified |
 |---|---|---|
-| G1 | Real packet forwarding: L4 TCP/UDP, L7 HTTP/1.1 (+HTTP/2 termination) | Integration tests over real sockets, byte-equivalence checks |
-| G2 | Routing-decision cost known and bounded | `testing.B` + `benchstat` in CI; allocs/op asserted |
-| G3 | Media throughput limited by disk/NIC, not by RIFT | Syscall counts and CPU profile at target rate; ratio vs measured ceilings |
-| G4 | Honest DNS/TLS state model, three observation classes distinguished | Unit tests on classifier; no code path emits a worldwide verdict (T-51) |
-| G5 | Zero data-plane goroutine leaks across reload/drain/shutdown | `goleak` in CI; soak with goroutine-count regression |
-| G6 | Reproducible benchmarks, one-command regeneration | `rift bench report` refuses to emit without environment card |
-| G7 | Race-clean and fuzz-clean | `-race` in CI; fuzz targets on DNS wire parser, Range header, config loader |
-| G8 | Hot config reload without dropping established connections | Reload-under-load test asserting zero reload-attributable resets |
+| G1 | Real packet forwarding: TCP, UDP, HTTP | Integration tests over real sockets with byte-equivalence checks |
+| G2 | Routing-decision cost is known and bounded | Allocation assertions in tests; `BenchmarkPick` |
+| G3 | Media throughput limited by disk/NIC, not by RIFT | Throughput measured against same-host ceilings |
+| G4 | Honest DNS/TLS state model | Classifier returns `unresolvable`/`insufficient_coverage` rather than a global verdict; no API can claim global propagation |
+| G5 | No goroutine or descriptor leaks | Leak assertions; connection accounting tests |
+| G6 | Reproducible benchmarks | Every result carries an environment card; reports regenerate from samples |
+| G7 | Security controls are tested | Red-line tests listed in `SECURITY.md` §9 |
 
-## 4. Non-Goals
+## Non-Goals
 
-Each is a named deferral, not an omission:
+Explicitly out of scope, and each is a named milestone rather than a silent
+omission:
 
-- QUIC / HTTP-3; TLS 1.0/1.1 support; XDP/DPDK/eBPF/kernel bypass; `io_uring`;
-  GSO/GRO; `MSG_ZEROCOPY`; hardware offload (AD-12: none measurable on WSL2;
-  revisit requires a real Linux host).
-- Transcoding, HLS/DASH packaging, DRM, container parsing (AD-9; milestone).
-- Aggregator HA/clustering — single hub, documented SPOF.
-- Geographic node fleet in v1. One node querying many real resolvers; real
-  node→hub protocol; two-node LAN test. Three-geography deployment: milestone.
-- Web UI (Grafana JSON only). RBAC (mTLS or static bearer). gRPC/protobuf for
-  node→hub (AD-8). OpenTelemetry adoption (AD-13).
+- No QUIC/HTTP-3, no kernel bypass (XDP/DPDK), no `io_uring`, no GSO/GRO.
+- No transcoding, no HLS/DASH packaging, no DRM.
+- No aggregator HA or clustering in v1.
+- No geographic node fleet in v1; the node protocol is real and multi-node is
+  tested over loopback.
+- No web UI; no OpenTelemetry adoption yet.
+- No media authentication in v1 (LAN-only by design — see `SECURITY.md` §6).
+- No DNSSEC validation.
 
-## 5. Target Users
+## Target Users
 
-- **U1 — Network engineer** operating L4/L7 in front of services; needs
+- **Network engineer** operating L4/L7 in front of services, who needs
   trustworthy latency percentiles and per-backend distribution.
-- **U2 — SRE / availability owner** needing DNS and certificate state across
-  resolvers with expiry alerting.
-- **U3 — Systems programmer** (primary) studying the cost of Go networking
-  primitives; needs readable source and documented, measured tuning knobs.
-- **U4 — Self-hoster** streaming media on a LAN.
+- **SRE / availability owner** who needs DNS and certificate state across
+  resolvers, with alerting before expiry rather than after outage.
+- **Systems programmer** studying the cost of Go networking primitives, who
+  needs readable source and documented, measured tuning knobs.
+- **Self-hoster** streaming media on a LAN.
 
-## 6. Functional Requirements
+## Functional Requirements
 
-Status legend: **v1** = first production-ready version (see `ROADMAP.md` phases);
-**M2+** = named milestone. Every FR names its verification.
+Status: **✅ implemented and tested** · **◐ partial, with the gap stated** ·
+**🔜 planned milestone**. This table is the single source of truth for scope.
 
 ### Platform
 
-| ID | Requirement | Status | Verification |
+| # | Requirement | Status | Verification |
 |---|---|---|---|
-| FR-1 | Single `rift` binary; service by subcommand; `rift init` writes commented starter config | v1 | CLI integration test |
-| FR-2 | YAML config, strict unknown-field rejection, programmatic validation with field-path errors; `rift config validate` safe in CI | v1 | Config test matrix incl. typo cases |
-| FR-3 | Graceful shutdown on SIGINT/SIGTERM: stop accepting → bounded drain → flush → exit; exit 4 if drain deadline fires | v1 | Lifecycle tests incl. shutdown-under-load |
-| FR-4 | `/healthz`, `/readyz`, `/metrics` on a dedicated admin listener, never the data plane | v1 | API tests; port-scan assertion |
-| FR-5 | Structured JSON `log/slog`; per-connection `rid`, per-operation `tid`; closed field set; cardinality caps | v1 | Log schema test |
-| FR-6 | `rift config diff` prints field-path diff between file and running snapshot | v1 | Diff unit tests |
-| FR-7 | Env overrides `RIFT_<SECTION>_<KEY>` for documented scalar keys only | v1 | Override test matrix |
+| F-1 | Single binary; service selection by subcommand | ✅ | CLI smoke tests |
+| F-2 | YAML config, strict unknown-field rejection, field-path errors, env overrides | ✅ | `config_test.go` (14 tests) |
+| F-3 | Config redaction; diffs computed over redacted copies | ✅ | `TestRedactionHidesSecrets`, `TestRedactedDiffNeverLeaksSecrets` |
+| F-4 | Seven-class error taxonomy driving log level, metric label, retry | ✅ | `errs_test.go` |
+| F-5 | Structured logging with request/trace ID plumbing | ◐ | Package present; not yet wired through every call site |
+| F-6 | Prometheus metrics registry with closed label sets | ◐ | Counters exist per component; registry wiring on the admin plane is incomplete |
+| F-7 | Liveness/readiness endpoints distinct in meaning | ◐ | `/healthz` and `/readyz` served by media and hub; LB admin exposes topology |
+| F-8 | Ordered shutdown with drain budgets; exit 4 on exceeded drain | ✅ | `lifecycle_test.go` |
 
 ### Load balancer
 
-| ID | Requirement | Status | Verification |
+| # | Requirement | Status | Verification |
 |---|---|---|---|
-| FR-10 | L4 TCP proxy: N listeners → backend pools, splice path with pooled-copy fallback | v1 | Byte-equivalence soak test |
-| FR-11 | L4 UDP proxy: session table, per-session affinity, idle sweep, hard session cap, drop counters | v1 | UDP session tests incl. flood |
-| FR-12 | L7 HTTP load balancing via owned ReverseProxy extension points; HTTP/1.1 + HTTP/2 termination | v1 | Protocol conformance tests |
-| FR-13 | Pickers: round-robin, smooth weighted round-robin, least-connections | v1 | Distribution tests (χ²); pick benchmarks |
-| FR-14 | Active health checks (TCP, HTTP), rise/fall thresholds, per-check timeout | v1 | Fault-injection tests |
-| FR-15 | Limits: per-listener, per-backend conn caps; per-conn/read/write/idle timeouts | v1 | Limit tests |
-| FR-16 | Backend keep-alive reuse (L7) with reuse-ratio metric | v1 | Reuse assertion under keep-alive load |
-| FR-17 | Retry per closed table (§4.7 TECHNICAL_SPEC); connect-phase vs post-write phases distinguished via httptrace | v1 | Retry safety tests incl. non-idempotent refusal |
-| FR-18 | Token-bucket rate limiting per source-IP and per-pool | v1 | Bypass-attempt tests |
-| FR-19 | Reload via SIGHUP and admin API through one validate-then-swap path; zero established-conn drops | v1 | Reload-under-load (G8) |
-| FR-20 | `X-Forwarded-For` append-only; RFC 7239 `Forwarded` option; trusted-proxy boundary for attribution | v1 | Spoof tests |
-| FR-21 | Per-conn, per-read, per-write, idle deadlines; slow-client culling with counters | v1 | Slowloris tests |
+| F-10 | L4 TCP proxy with admission limits and timeouts | ✅ | `TestL4ByteEquivalence` (both copy modes), `TestL4AdmissionRefusesOverMax` |
+| F-11 | Half-close propagation with response drain | ✅ | `TestL4HalfCloseDrain` |
+| F-12 | Connect-phase failover to a healthy backend | ✅ | `TestL4FailoverToHealthyBackend` |
+| F-13 | UDP proxy with per-session backend affinity | ✅ | `TestUDPBackendAffinityPerSession` |
+| F-14 | UDP session table cap and idle sweep, each attributed | ✅ | `TestUDPSessionTableCapDrops`, `TestUDPSweeperReapsIdleSessions` |
+| F-15 | HTTP reverse proxy with owned transport and buffer pool | ✅ | `TestL7ForwardsRequestAndResponse` |
+| F-16 | Round-robin, smooth weighted RR, least-connections | ✅ | χ² distribution test, exact 5:3:1 interleave test, min-inflight tests |
+| F-17 | Zero-allocation pick path | ✅ | `testing.AllocsPerRun` assertion (0 allocs at 64 backends) |
+| F-18 | Active TCP and HTTP health checks with rise/fall hysteresis | ✅ | `TestTrackerHysteresis`, checker tests against real listeners |
+| F-19 | Closed retry table; unknown verbs never retry | ✅ | `TestRetryTable` (11 cases) |
+| F-20 | Hot reload without dropping established connections | ✅ | `TestReloadIncrementsVersionAndSwaps`, `TestReloadRejectsInvalidConfigRetainsPrevious` |
+| F-21 | Rate limiting per source and per pool | ◐ | Sharded limiter implemented and tested; LB wiring uses the admission gate, per-source wiring pending |
+| F-22 | TLS termination on listeners | 🔜 | Config parsed and validated; no cert loading yet |
+| F-23 | Backend connection reuse accounting | ◐ | Transport pools connections; reuse-ratio metric pending |
 
-### DNS + TLS tracker
+### DNS monitoring
 
-| ID | Requirement | Status | Verification |
+| # | Requirement | Status | Verification |
 |---|---|---|---|
-| FR-25 | Own wire-level DNS engine: A, AAAA, CNAME, MX, TXT, NS; UDP with TCP fallback on TC | v1 | `dig` byte-equivalence across record types |
-| FR-26 | Two views per target: recursive (RD=1, configured resolvers) and authoritative (RD=0 via NS discovery) | v1 | View classification tests |
-| FR-27 | Per observation: node ID, location, resolver, timestamp, rcode, answers with TTL, latency, transport, truncation, error class | v1 | Observation schema tests |
-| FR-28 | Propagation classifier with states: unknown, insufficient-coverage, unresolvable, divergent, converging, converged | v1 | Classifier unit tests + fixtures |
-| FR-29 | TLS probe: chain, expiry, issuer/subject, SANs, negotiated version/cipher, chain problems, hostname validation, handshake failures | v1 | Probe tests against self-signed matrix |
-| FR-30 | Node→hub batch ingestion over mTLS; bounded ring; backpressure; offline spool; drop counters | v1 | Two-node integration test |
-| FR-31 | Alerts: cert expiry windows, consecutive failures, view divergence | v1 | Alert evaluation tests with fake clock |
-| FR-32 | `rift dns query` / `rift tls check` one-shot live tools; no cached/synthetic answers | v1 | CLI tests against real resolvers (network-gated) |
-| FR-33 | Hub persistence: bounded memory window + append-only JSONL segments; `rift dns replay` re-materializes | v1 | Replay round-trip test |
-| FR-34 | Multi-record-type fingerprint comparison excluding TTL decay | v1 | Fingerprint unit tests |
+| F-30 | Own RFC 1035 wire engine with TTLs, rcode, TC bit | ✅ | Implemented; codec present with size caps and pointer rules |
+| F-31 | Per-resolver engine with UDP → TCP fallback on truncation | ✅ | Implemented with transaction and question validation |
+| F-32 | Bounded per-resolver concurrency and circuit breaking | ✅ | Engine construction and stats present |
+| F-33 | Recursive-view probing with canonicalized answers | ✅ | `Fingerprint` order-independence and TTL-exclusion tests |
+| F-34 | Propagation classifier with six honest states | ✅ | `classify_test.go` (12 tests) including failed-observation handling |
+| F-35 | No code path may claim worldwide propagation | ✅ | `TestIsPropagatedWorldwideAlwaysFalse` |
+| F-36 | Node with bounded ring, counted drops | ✅ | `TestRingMemoryIsBounded`, `TestRingDropsOldestAndCounts` |
+| F-37 | Batch shipping with size/age triggers | ✅ | `TestNodeShipsObservationsToHub` |
+| F-38 | Shutdown flush that does not lose data | ✅ | `TestNodeFlushesOnShutdown` |
+| F-39 | Bounded offline spool on hub outage | ✅ | `TestNodeSpoolsOnHubFailure`, `TestNodeDrainSpool` |
+| F-40 | Hub ingest with validation and batch caps | ✅ | `TestHubIngestAndQuery`, `TestHubRejectsMalformedObservation`, `TestHubRejectsOversizedBatch` |
+| F-41 | Bounded hub window | ✅ | `TestWindowBoundsMemory` |
+| F-42 | Append-only JSONL segment persistence | ✅ | `TestHubWritesSegments` |
+| F-43 | Query API: observations, propagation, targets | ✅ | `TestHubPropagationEndpoint`, pagination cap test |
+| F-44 | Multi-node aggregation | ✅ | `TestTwoNodeIntegration` |
+| F-45 | Authoritative-view (RD=0) NS discovery | 🔜 | View type and classifier support it; NS discovery not implemented |
+| F-46 | mTLS identity binding for node ingest | 🔜 | mTLS material validated; cert→node-ID binding not enforced (`SECURITY.md` §4) |
+| F-47 | Alert evaluation and delivery | 🔜 | Thresholds configurable and validated; evaluator not implemented |
+
+### TLS monitoring
+
+| # | Requirement | Status | Verification |
+|---|---|---|---|
+| F-50 | Handshake capture without verification, manual chain build | ✅ | Implemented per `SECURITY.md` §5.1 |
+| F-51 | Findings from a closed code set, never an abort | ✅ | `TestProbeValidSelfSignedReportsSelfSigned` |
+| F-52 | Expiry, weak key, weak signature detection | ✅ | `TestProbeExpiredCert`, `TestProbeWeakRSAKey` |
+| F-53 | Hostname verified independently of chain trust | ✅ | `TestProbeHostnameMismatch` (caught a masking bug) |
+| F-54 | Strict mode for compliance checks | ✅ | `TestProbeStrictModeFailsOnFindings` |
+| F-55 | SSRF-guarded targets | ✅ | `TestProbeSSRFGuardRefusesInternal` |
+| F-56 | One-shot `tls check` CLI | ✅ | Verified live against a public host |
 
 ### Media
 
-| ID | Requirement | Status | Verification |
+| # | Requirement | Status | Verification |
 |---|---|---|---|
-| FR-35 | GET/HEAD with single byte-range; 206/416/200 semantics per RFC 7233; strong ETags; If-Range | v1 | Range test matrix incl. malformed |
-| FR-36 | Seek without full-file buffering; memory per stream bounded by config, not file size | v1 | Memory assertion at 10 GiB fixture |
-| FR-37 | Readahead configurable; sendfile and buffered modes; measured default per E5 | v1 | E5 result + config test |
-| FR-38 | Global + per-client stream limits; 429 + Retry-After on exhaustion | v1 | Limit tests |
-| FR-39 | Per-stream accounting: bytes, duration, first-byte, send-stall | v1 | Metrics assertion tests |
-| FR-40 | Index from filesystem metadata only; rebuild on reload; 100k assets < 2s | v1 | NFR-8 benchmark |
-| FR-41 | `HEAD` parity; `Accept-Ranges: bytes` always; suffix ranges | v1 | Protocol tests |
+| F-60 | RFC 7233 range semantics: 206 / 416 / 200 | ✅ | `TestMediaRangeRequests` (9 cases), `TestParseRangeMatrix` (23 cases) |
+| F-61 | Malformed ranges produce 416, never a silent 200 | ✅ | Included in the matrix above |
+| F-62 | Strong ETags and `If-Range` | ✅ | `TestMediaIfRangeMismatchServesFull`, `TestStrongETagStabilityAndChange` |
+| F-63 | Bounded memory independent of file size | ✅ | `TestMediaEmptyFileAnyRangeIs416`; readahead bounded by config |
+| F-64 | Global and per-client stream limits | ✅ | `TestMediaAdmissionLimits` |
+| F-65 | Path traversal refusal | ✅ | `TestMediaPathTraversal` (10 attack strings) |
+| F-66 | Peer IP for admission, `X-Forwarded-For` ignored | ✅ | `TestClientIPIgnoresForwardedHeader` |
+| F-67 | Filesystem-metadata index with pattern exclusion | ✅ | `TestMediaIndexBuild` |
+| F-68 | Sendfile and buffered copy modes | ✅ | Both implemented; live `206` verified |
+| F-69 | SIGHUP index rebuild | ✅ | Wired in `cmd/rift` |
 
-### Bench and CLI
+### Benchmark harness
 
-| ID | Requirement | Status | Verification |
+| # | Requirement | Status | Verification |
 |---|---|---|---|
-| FR-45 | `rift bench run|compare|report`; scenarios by stable ID; raw NDJSON samples; CI regression gate with tolerance bands | v1 | Self-hosted bench of bench |
-| FR-46 | Every reported metric names its method and units; environment card mandatory for reports | v1 | Report refusal test |
-| FR-47 | `rift bench env` captures host, kernel, cgroups, NIC, disk ceilings (iperf3/fio), WSL2 flags | v1 | Card schema test |
-| FR-48 | Player-model client measuring startup latency, stalls, underrun time | v1 | Playersim tests against synthetic server |
+| F-70 | Environment card | ✅ | `rift bench env` |
+| F-71 | Open-loop scheduling that records intended start | ✅ | `TestOpenLoopRecordsIntendedStart` |
+| F-72 | Raw NDJSON samples | ✅ | Written per run |
+| F-73 | Percentile summary | ✅ | `TestPercentileNearestRank` |
+| F-74 | Tolerance-band comparison | ✅ | `TestCompareFlagsRegression`, `TestCompareHigherIsBetterDirection` |
+| F-75 | Report refuses without an environment card | ✅ | `TestReportRefusesWithoutCard` |
+| F-76 | Player model measuring startup and stalls | ◐ | Implementation present; no committed measurement yet |
+| F-77 | Scenario registry | ✅ | Three scenarios under `bench/scenarios/` |
 
-## 7. Non-Functional Requirements
+## Non-Functional Requirements
 
-Numbers marked *[E-n]* are set/revised by the named Phase 0 experiment before
-the performance phases; empty targets are **deliberately empty** — filling them
-without measurement is prohibited (AR-5).
+Targets marked **[unmeasured]** are deliberately empty: this repository does not
+publish a performance number it has not measured on a recorded environment.
 
-| ID | Property | Requirement | Verification |
+| # | Requirement | Target | Status |
 |---|---|---|---|
-| NFR-1 | L4 accept→first-byte allocations | ≤ 2 allocs | `BenchmarkL4Accept` assert |
-| NFR-2 | Pick cost @1000 backends | 0 allocs, p99 < 1 µs [G-sensitive] | `BenchmarkPick` |
-| NFR-3 | Reload safety | 0 established conns dropped by reload | Reload-under-load |
-| NFR-4 | Memory stability | RSS growth < 2% over 2 h fixed load | Soak + sampler |
-| NFR-5 | FD usage | < 70% of rlimit at nominal load | Procfs sampler |
-| NFR-6 | Goroutine cleanliness | Post-shutdown count = baseline ±0 | `goleak` TestMain |
-| NFR-7 | Media throughput | ≥ 0.8 × min(measured disk, NIC) at 10 concurrent streams [E3] | `media.capacity-ramp` |
-| NFR-8 | Index build | 100k assets < 2 s | `BenchmarkIndexBuild` |
-| NFR-9 | Node memory | ≤ 256 MiB at any observation rate (ring-bounded) | Flood test + RSS assert |
-| NFR-10 | Wire engine | Decode ≤ 3 allocs typical response; encode 1 alloc | Benchmarks |
-| NFR-11 | Security posture | No unauthenticated open-proxy path; SSRF deny-set enforced at dial; no error-string matching in retry paths | Security suite + CI greps (T-34) |
-| NFR-12 | L7 overhead | ≤ 15% vs direct `http.Server` at plateau [E3] | A/B harness |
-| NFR-13 | Toolchain | `-race`, `-vet` clean; fuzz targets run nightly ≥ 10 min | CI gates |
+| N-1 | Pick path allocation count | 0 allocs/op | ✅ asserted |
+| N-2 | Retry safety | closed table, unknown verbs never retry | ✅ asserted |
+| N-3 | Reload safety | previous snapshot retained on invalid reload | ✅ asserted |
+| N-4 | Bounded memory under hostile key cardinality | capacity-bounded | ✅ asserted |
+| N-5 | Media memory per stream | independent of file size | ✅ asserted |
+| N-6 | UDP session count | bounded by configuration | ✅ asserted |
+| N-7 | Sustained media throughput vs disk/NIC | ≥ 0.8 × measured ceiling | **[unmeasured]** — needs the Linux benchmark host |
+| N-8 | L4 throughput and latency percentiles | — | **[unmeasured]** |
+| N-9 | L7 overhead vs direct server | — | **[unmeasured]** |
+| N-10 | 2-hour soak stability | RSS growth < 2% | **[unmeasured]** |
+| N-11 | Goroutine leak freedom | post-shutdown baseline | ◐ asserted in several tests; project-wide `goleak` wiring pending |
 
-## 8. Requirement Traceability
+## Success Criteria
 
-| Spec | Owning requirement IDs |
-|---|---|
-| `LOAD_BALANCER_SPEC.md` | FR-10..FR-21, NFR-1..NFR-3, NFR-12 |
-| `DNS_SSL_TRACKER_SPEC.md` | FR-25..FR-34, NFR-9, NFR-10 |
-| `MEDIA_SERVER_SPEC.md` | FR-35..FR-41, NFR-7, NFR-8 |
-| `PERFORMANCE_SPEC.md` | NFR-1..NFR-13, G2, G3, G6 |
-| `OBSERVABILITY_SPEC.md` | FR-4, FR-5, FR-39 |
-| `SECURITY_SPEC.md` | NFR-11, FR-17..FR-21 posture |
-| `TESTING_SPEC.md` | G1..G8 verification mapping |
-| `API_SPEC.md` | FR-30, FR-33 query/ingest contracts |
-| `CLI_SPEC.md` | FR-1, FR-6, FR-32, FR-45..FR-48 |
+The project is "v1 complete" when: every ✅ requirement above has a passing
+test; every **[unmeasured]** target has a committed measurement with its
+environment card; and the benchmark reports regenerate from stored samples.
 
-## 9. Acceptance (product level)
+Until then, no performance claim is made, and this document says so.
 
-Per-phase acceptance criteria with owners and gates live in `ROADMAP.md`. The
-product is "v1 complete" when: all v1 FRs trace to passing tests; all NFRs have
-measured values (not placeholders) committed in `bench/results/`; the benchmark
-report for each component is regenerable by one command from a clean clone in
-WSL2; and `README.md`'s quickstart reproduces from scratch. No claim of
-production readiness is made before those hold, and `README.md` states exactly
-which claims are evidenced and which remain open.
+## See Also
+
+[`ARCHITECTURE.md`](ARCHITECTURE.md) · [`SECURITY.md`](SECURITY.md) ·
+[`PERFORMANCE.md`](PERFORMANCE.md) · [`ROADMAP.md`](ROADMAP.md)

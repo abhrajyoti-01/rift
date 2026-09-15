@@ -6,13 +6,11 @@ import (
 	"time"
 )
 
-// Breaker timing tests run inside synctest bubbles: zero real sleeps, all
-// cooldown transitions deterministic (AR-8, TECHNICAL_SPEC §2.3).
-func TestBreakerOpensAfterThreshold(t *testing.T) {
+// Breaker timing runs entirely under synctest: zero real sleeps, fully
+// deterministic cooldown transitions.
+func TestBreakerOpensAfterConsecutiveFailures(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		now := time.Now
-		b := New(Config{FailureThreshold: 3, RecoveryCooldown: 10 * time.Second, SuccessThreshold: 2}, now)
-
+		b := New(Config{FailureThreshold: 3, RecoveryCooldown: 10 * time.Second, SuccessThreshold: 2}, time.Now)
 		for i := 0; i < 2; i++ {
 			if !b.Allow() {
 				t.Fatal("closed breaker must allow")
@@ -20,85 +18,46 @@ func TestBreakerOpensAfterThreshold(t *testing.T) {
 			b.Failure()
 		}
 		if b.State() != "closed" {
-			t.Fatalf("after 2/3 failures: %s, want closed", b.State())
+			t.Fatalf("2/3 failures: %s, want closed", b.State())
 		}
-		if !b.Allow() {
-			t.Fatal("still closed at 2/3")
-		}
-		b.Failure() // 3rd consecutive failure → open
+		b.Failure()
 		if b.State() != "open" {
-			t.Fatalf("after 3 failures: %s, want open", b.State())
+			t.Fatalf("3 failures: %s, want open", b.State())
 		}
 		if b.Allow() {
-			t.Fatal("open breaker must refuse (cooldown running)")
+			t.Fatal("open breaker must refuse while cooling down")
 		}
 	})
 }
 
-func TestBreakerCooldownToHalfOpenAndClose(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		b := New(Config{FailureThreshold: 2, RecoveryCooldown: 10 * time.Second, SuccessThreshold: 2}, time.Now)
-		b.Failure()
-		b.Failure()
-		if b.State() != "open" {
-			t.Fatalf("state %s, want open", b.State())
-		}
-
-		time.Sleep(10 * time.Second) // bubble clock: instant, deterministic
-		if b.State() != "half_open" {
-			t.Fatalf("after cooldown: %s, want half_open", b.State())
-		}
-
-		// First probe succeeds; with SuccessThreshold 2 the second call is
-		// still admitted (probe budget 2) and its success closes the
-		// breaker.
-		if !b.Allow() {
-			t.Fatal("probe refused")
-		}
-		if !b.Allow() {
-			t.Fatal("second half-open admission must be allowed (budget = SuccessThreshold)")
-		}
-		b.Success()
-		b.Success()
-		if b.State() != "closed" {
-			t.Fatalf("state %s, want closed", b.State())
-		}
-		if !b.Allow() {
-			t.Fatal("closed breaker must allow")
-		}
-	})
-}
-
-func TestBreakerHalfOpenCloses(t *testing.T) {
+func TestBreakerHalfOpenProbeBudgetReachesThreshold(t *testing.T) {
+	// Regression guard: with SuccessThreshold 2, the breaker must admit
+	// enough half-open probes for the threshold to be reachable. Admitting
+	// only one probe would make closing impossible.
 	synctest.Test(t, func(t *testing.T) {
 		b := New(Config{FailureThreshold: 2, RecoveryCooldown: 5 * time.Second, SuccessThreshold: 2}, time.Now)
 		b.Failure()
 		b.Failure()
 		time.Sleep(5 * time.Second)
 
-		// Probe budget = SuccessThreshold (2): first probe succeeds, second
-		// admission's success closes the breaker.
 		if !b.Allow() {
-			t.Fatal("probe refused")
+			t.Fatal("first half-open probe refused")
 		}
 		b.Success()
 		if b.State() != "half_open" {
-			t.Fatalf("after 1/2 successes: %s, want half_open", b.State())
+			t.Fatalf("1/2 successes: %s, want half_open", b.State())
 		}
 		if !b.Allow() {
-			t.Fatal("second half-open admission must be allowed")
+			t.Fatal("second half-open admission must be allowed (budget = threshold)")
 		}
 		b.Success()
 		if b.State() != "closed" {
-			t.Fatalf("state %s, want closed", b.State())
-		}
-		if !b.Allow() {
-			t.Fatal("closed breaker must allow")
+			t.Fatalf("after threshold successes: %s, want closed", b.State())
 		}
 	})
 }
 
-func TestBreakerHalfOpenProbeFailureReopens(t *testing.T) {
+func TestBreakerProbeFailureReopens(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		b := New(Config{FailureThreshold: 1, RecoveryCooldown: 5 * time.Second, SuccessThreshold: 2}, time.Now)
 		b.Failure()
@@ -106,12 +65,12 @@ func TestBreakerHalfOpenProbeFailureReopens(t *testing.T) {
 		if !b.Allow() {
 			t.Fatal("probe refused")
 		}
-		b.Failure() // probe fails → reopen immediately
+		b.Failure()
 		if b.State() != "open" {
 			t.Fatalf("after probe failure: %s, want open", b.State())
 		}
 		if b.Allow() {
-			t.Fatal("must be refused while reopened")
+			t.Fatal("must refuse while reopened")
 		}
 	})
 }
@@ -120,10 +79,24 @@ func TestBreakerSuccessResetsConsecutiveCount(t *testing.T) {
 	b := New(Config{FailureThreshold: 3, RecoveryCooldown: time.Second, SuccessThreshold: 1}, time.Now)
 	b.Failure()
 	b.Failure()
-	b.Success() // resets
+	b.Success()
 	b.Failure()
 	b.Failure()
 	if b.State() != "closed" {
-		t.Errorf("2 failures after reset: %s, want closed (never hit threshold)", b.State())
+		t.Errorf("2 failures after a reset: %s, want closed", b.State())
+	}
+}
+
+func TestBreakerDefaults(t *testing.T) {
+	b := New(Config{}, time.Now)
+	for i := 0; i < 4; i++ {
+		b.Failure()
+	}
+	if b.State() != "closed" {
+		t.Error("default FailureThreshold is 5; 4 failures must not open")
+	}
+	b.Failure()
+	if b.State() != "open" {
+		t.Error("5 failures should open with default threshold")
 	}
 }

@@ -1,7 +1,3 @@
-// Package model holds the TLS monitoring data contracts (TECHNICAL_SPEC
-// §6). tlsmon must not share TLS config code with lb (ARCHITECTURE §7):
-// lb terminates TLS and must verify; tlsmon must NOT verify so it can
-// report chain failures — that inversion is the point of the component.
 package tlsmodel
 
 import "time"
@@ -15,10 +11,41 @@ const (
 	SevCritical
 )
 
-// Finding is one detected problem. Code is from the closed set (EXPIRED,
-// NOT_YET_VALID, HOSTNAME_MISMATCH, UNTRUSTED_ROOT, INCOMPLETE_CHAIN,
-// SELF_SIGNED, WEAK_KEY, WEAK_SIG, OLD_TLS, HANDSHAKE_REFUSED,
-// CONN_REFUSED, CONN_TIMEOUT, PROTO_MISMATCH) — never free-form.
+// String renders the closed severity label set.
+func (s Severity) String() string {
+	switch s {
+	case SevInfo:
+		return "info"
+	case SevWarning:
+		return "warning"
+	case SevCritical:
+		return "critical"
+	default:
+		return "unknown"
+	}
+}
+
+// Finding codes. This is the CLOSED set: a free-form code would become an
+// unbounded metric label, and an unbounded label is a memory-exhaustion
+// primitive.
+const (
+	CodeExpired          = "EXPIRED"
+	CodeNotYetValid      = "NOT_YET_VALID"
+	CodeHostnameMismatch = "HOSTNAME_MISMATCH"
+	CodeUntrustedRoot    = "UNTRUSTED_ROOT"
+	CodeIncompleteChain  = "INCOMPLETE_CHAIN"
+	CodeSelfSigned       = "SELF_SIGNED"
+	CodeWeakKey          = "WEAK_KEY"
+	CodeWeakSig          = "WEAK_SIG"
+	CodeOldTLS           = "OLD_TLS"
+	CodeHandshakeRefused = "HANDSHAKE_REFUSED"
+	CodeConnRefused      = "CONN_REFUSED"
+	CodeConnTimeout      = "CONN_TIMEOUT"
+	CodeProtoMismatch    = "PROTO_MISMATCH"
+	CodeNoPeerCert       = "NO_PEER_CERT"
+)
+
+// Finding is one detected problem.
 type Finding struct {
 	Severity Severity
 	Code     string
@@ -27,20 +54,54 @@ type Finding struct {
 
 // CertInfo captures one presented certificate.
 type CertInfo struct {
-	Subject, Issuer string
+	Subject             string
+	Issuer              string
 	NotBefore, NotAfter time.Time
-	SANs   []string
-	Serial, SigAlg string
-	IsCA   bool
+	SANs                []string
+	Serial              string
+	SigAlg              string
+	IsCA                bool
 }
 
-// Report is the probe product: every failure is a Finding, never an abort
-// — a target with a bad chain is a successfully monitored target (AD-5).
+// DaysUntilExpiry returns whole days until NotAfter, negative if expired.
+func (c CertInfo) DaysUntilExpiry(now time.Time) int {
+	return int(c.NotAfter.Sub(now).Hours() / 24)
+}
+
+// Report contains the certificates, negotiated connection details, and
+// findings collected during a probe.
 type Report struct {
-	Target    string
-	Timestamp time.Time
-	Chain     []CertInfo // leaf first, as presented
+	Target             string
+	Timestamp          time.Time
+	Chain              []CertInfo // leaf first, as presented
 	NegotiatedProtocol string
-	NegotiatedCipher    string
-	Findings  []Finding
+	NegotiatedCipher   string
+	Findings           []Finding
+}
+
+// HasCritical reports whether the report contains any critical finding.
+func (r *Report) HasCritical() bool {
+	for _, f := range r.Findings {
+		if f.Severity == SevCritical {
+			return true
+		}
+	}
+	return false
+}
+
+// Codes returns the finding codes present, in report order.
+func (r *Report) Codes() []string {
+	out := make([]string, 0, len(r.Findings))
+	for _, f := range r.Findings {
+		out = append(out, f.Code)
+	}
+	return out
+}
+
+// Leaf returns the leaf certificate, or the zero value when absent.
+func (r *Report) Leaf() (CertInfo, bool) {
+	if len(r.Chain) == 0 {
+		return CertInfo{}, false
+	}
+	return r.Chain[0], true
 }

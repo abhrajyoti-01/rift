@@ -1,9 +1,3 @@
-// Package model holds the load balancer's data contracts (TECHNICAL_SPEC
-// §4.1): Backend, Pool, ListenerSpec, Snapshot. Backend identity is
-// immutable; mutable state is atomic only — Conns feeds least-connections
-// without a pool lock, Health is written only by the health system.
-// Snapshots are immutable and shared behind one atomic.Pointer in
-// lb/control (AD-6): reload cannot stall a request.
 package lbmodel
 
 import "sync/atomic"
@@ -11,8 +5,15 @@ import "sync/atomic"
 // PoolID identifies a backend pool within a Snapshot.
 type PoolID string
 
+// String renders the pool id (metric labels use it; pools are a closed set
+// from config, so cardinality is bounded).
+func (p PoolID) String() string { return string(p) }
+
 // ListenerID identifies a listener within a Snapshot.
 type ListenerID string
+
+// String renders the listener id.
+func (l ListenerID) String() string { return string(l) }
 
 // Backend is the unit of health and load accounting. Immutable identity
 // (ID, Addr, Weight); mutable state is atomic only. Backends are shared
@@ -26,14 +27,16 @@ type Backend struct {
 	Health atomic.Bool  // written only by the health system
 }
 
-// Pool is an ordered, immutable-per-snapshot backend set.
+// Pool is an ordered, immutable-per-snapshot backend set. Picker names the
+// algorithm this pool uses (the closed set in lb/picker).
 type Pool struct {
 	ID       PoolID
+	Picker   string
 	Backends []*Backend
 }
 
 // TLSConfig terminates TLS on a listener when non-nil. Key material is a
-// file path, never inline (SECURITY_SPEC §7).
+// file path, never inline.
 type TLSConfig struct {
 	CertFile   string
 	KeyFile    string

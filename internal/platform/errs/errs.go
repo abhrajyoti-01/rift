@@ -1,7 +1,3 @@
-// Package errs is RIFT's single error taxonomy. Class drives exactly three
-// things — log level, metric label, retry eligibility — and nothing else
-// (TECHNICAL_SPEC §1). Construct errors only via New/Wrap on data-plane
-// paths; ClassOf is the only classifier in the tree.
 package errs
 
 import (
@@ -83,8 +79,8 @@ func (e *Error) Error() string {
 func (e *Error) Unwrap() error { return e.Err }
 
 // ClassOf returns the Class of err, searching the chain for an *Error.
-// ClassUnknown if none is present. This is the only classifier in the tree;
-// error-string matching is a CI-grep violation (T-34).
+// ClassUnknown if none is present. This is the only classifier in the
+// tree; error-string matching is forbidden.
 func ClassOf(err error) Class {
 	if err == nil {
 		return ClassUnknown
@@ -98,13 +94,11 @@ func ClassOf(err error) Class {
 	return ClassUnknown
 }
 
-// ErrNotImplemented is returned by cmd/rift for subcommands whose ROADMAP
-// phase has not landed (TECHNICAL_SPEC §1). A CI grep asserts it does not
-// survive to v1; no stub silently pretends to work instead of returning it.
-var ErrNotImplemented = errors.New("not implemented in this phase — see ROADMAP.md")
+// ErrNotImplemented is returned for unsupported subcommands.
+var ErrNotImplemented = errors.New("not implemented")
 
-// ErrDrainExceeded is raised by lifecycle when the drain budget fires
-// (TECHNICAL_SPEC §13). ExitCode maps it to 4.
+// ErrDrainExceeded is raised by lifecycle when the drain budget fires;
+// ExitCode maps it to 4.
 var ErrDrainExceeded = errors.New("drain deadline exceeded")
 
 // MatchDrain reports whether err is (or wraps) ErrDrainExceeded — the
@@ -113,7 +107,7 @@ func MatchDrain(err error) bool {
 	return errors.Is(err, ErrDrainExceeded)
 }
 
-// ExitCode maps an error to a process exit code per CLI_SPEC §5: 0 clean,
+// ExitCode maps an error to a process exit code: 0 clean,
 // 1 runtime fault, 2 config fault at startup, 3 bind/resource failure,
 // 4 drain deadline exceeded. 124 is reserved for bench/harness and is never
 // returned here.

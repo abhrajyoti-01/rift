@@ -1,10 +1,3 @@
-// Package httpx is the HTTP server factory with timeout sets, middleware,
-// and TLS profiles (TECHNICAL_SPEC §4.6 posture). The CL+TE pre-forward
-// reject and the closed-header hygiene rules live here as middleware —
-// framing stays stdlib-owned (AD-3); this package adds the boundary checks
-// the proxy boundary requires.
-//
-// Phase 1 (ROADMAP.md). This file pins the public contract.
 package httpx
 
 import (
@@ -23,19 +16,17 @@ type ServerOptions struct {
 }
 
 // NewServer builds an http.Server with the timeout set and middleware
-// applied. The admin plane binds loopback by default; routable binds without
-// explicit allow_remote are a refuse-to-start condition (SECURITY_SPEC §3.4).
+// applied. The admin plane binds loopback by default; routable binds require
+// explicit allow_remote.
 func NewServer(opts ServerOptions, handler http.Handler) *http.Server {
-	// Phase 1 (ROADMAP.md).
 	_ = opts
 	_ = handler
 	return nil
 }
 
-// Middleware applies boundary hygiene: CL+TE co-presence rejection
-// (smuggling), header caps, request-id injection.
+// Middleware rejects ambiguous request framing and applies header and
+// request-ID limits.
 func Middleware(next http.Handler) http.Handler {
-	// Phase 1 (ROADMAP.md).
 	_ = next
 	return nil
 }

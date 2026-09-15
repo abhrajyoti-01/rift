@@ -6,10 +6,16 @@
 rift
 cmd/rift/rift
 
-# Benchmark / profiling outputs (committed results live under bench/results/)
+# Benchmark and profile output (committed baselines/results are tracked)
 *.prof
 *.pprof
 *.trace
+
+# Local runtime state
+*.spool/
+bench/results/*/
+bench/fixtures/
+rift.local.yaml
 
 # Local environment and editor state
 .env

@@ -1,6 +1,3 @@
-// Package retry defines the retry policy type (TECHNICAL_SPEC §2.4). The
-// policy never sleeps — the caller sleeps under its own context so
-// synctest can drive it. RetryOn must consult errs.ClassOf, never strings.
 package retry
 
 import (
@@ -8,7 +5,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/rift/rift/internal/platform/errs"
+	"github.com/abhrajyoti-01/rift/internal/platform/errs"
 )
 
 // Backoff is the delay schedule between attempts. Jitter ∈ [0,1] is the

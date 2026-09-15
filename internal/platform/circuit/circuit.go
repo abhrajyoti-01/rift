@@ -1,5 +1,3 @@
-// Package circuit implements the closed/open/half-open circuit breaker
-// (TECHNICAL_SPEC §2.3). Clock injection is mandatory (AR-8).
 package circuit
 
 import (

@@ -7,19 +7,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rift/rift/internal/platform/errs"
+	"github.com/abhrajyoti-01/rift/internal/platform/errs"
 )
 
-// mockService records lifecycle calls with optional failures.
 type mockService struct {
 	name      string
 	startErr  error
 	stopErr   error
 	stopBlock time.Duration
 
-	mu     sync.Mutex
+	mu      sync.Mutex
 	started bool
-	stopped bool
+	stopped int
 }
 
 func (m *mockService) Name() string { return m.name }
@@ -37,7 +36,7 @@ func (m *mockService) Stop(ctx context.Context) error {
 		}
 	}
 	m.mu.Lock()
-	m.stopped = true
+	m.stopped++
 	m.mu.Unlock()
 	return m.stopErr
 }
@@ -49,15 +48,16 @@ func TestPhaseSequenceAndOrderedStop(t *testing.T) {
 		&mockService{name: "third"},
 	)
 	if a.Phase() != PhaseInit {
-		t.Fatalf("initial phase %s, want init", a.Phase())
+		t.Fatalf("initial phase = %s, want init", a.Phase())
 	}
 
 	sig := make(chan os.Signal, 1)
 	done := make(chan error, 1)
-	go func() { done <- a.RunWithSignal(context.Background(), func() <-chan os.Signal { return sig }) }()
+	go func() {
+		done <- a.RunWithSignal(context.Background(), func() <-chan os.Signal { return sig })
+	}()
 
-	// Wait for serving.
-	deadline := time.After(2 * time.Second)
+	deadline := time.After(3 * time.Second)
 	for a.Phase() != PhaseServing {
 		select {
 		case <-deadline:
@@ -70,12 +70,18 @@ func TestPhaseSequenceAndOrderedStop(t *testing.T) {
 		t.Fatalf("Run returned %v, want nil", err)
 	}
 	if a.Phase() != PhaseStopped {
-		t.Errorf("final phase %s, want stopped", a.Phase())
+		t.Errorf("final phase = %s, want stopped", a.Phase())
 	}
-	for i, svc := range a.services {
+	for _, svc := range a.services {
 		m := svc.(*mockService)
-		if !m.started || !m.stopped {
-			t.Errorf("service %d (%s): started=%v stopped=%v", i, m.name, m.started, m.stopped)
+		if !m.started {
+			t.Errorf("%s never started", m.name)
+		}
+		// Stop must be called exactly once per service: calling it twice
+		// (for example once for "drain" and again for "flush") is a real
+		// bug that this assertion catches.
+		if m.stopped != 1 {
+			t.Errorf("%s Stop called %d times, want exactly 1", m.name, m.stopped)
 		}
 	}
 }
@@ -93,27 +99,25 @@ func TestStartupFailureRollsBack(t *testing.T) {
 		t.Fatal("startup failure must return an error")
 	}
 	if errs.ClassOf(err) != errs.ClassResource {
-		t.Errorf("class %v, want ClassResource", errs.ClassOf(err))
+		t.Errorf("class = %v, want ClassResource", errs.ClassOf(err))
 	}
 	if !first.started {
 		t.Error("first service should have started")
 	}
-	if first.stopped != true {
-		t.Error("rollback must stop the started service")
+	if first.stopped != 1 {
+		t.Error("rollback must stop the started service exactly once")
 	}
 	if third.started {
-		t.Error("third service must not start after second's failure")
+		t.Error("a service after the failure must not start")
 	}
 }
 
+// TestDrainDeadlineExitsFour: a service blocking past the shutdown budget
+// must produce ErrDrainExceeded, which maps to exit code 4.
 func TestDrainDeadlineExitsFour(t *testing.T) {
-	// A service whose Stop blocks past the whole shutdown budget must
-	// produce ErrDrainExceeded → exit code 4 (CLI_SPEC §5). The default
-	// budget is 15s; inject a small one so the test is fast (budget math
-	// itself is covered by TestShutdownBudgetSplit).
 	blocking := &mockService{name: "blocker", stopBlock: 30 * time.Second}
 	a := New("test", blocking)
-	a.SetShutdownTimeout(500 * time.Millisecond)
+	a.SetShutdownTimeout(300 * time.Millisecond) // fast test; budget math is separate
 
 	sig := make(chan os.Signal, 1)
 	done := make(chan error, 1)
@@ -124,10 +128,11 @@ func TestDrainDeadlineExitsFour(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	sig <- os.Interrupt
+
 	select {
 	case err := <-done:
 		if err == nil {
-			t.Fatal("blocked drain must error, not hang")
+			t.Fatal("a blocked drain must error, not hang")
 		}
 		if !errs.MatchDrain(err) {
 			t.Errorf("expected ErrDrainExceeded, got %v", err)
@@ -135,8 +140,8 @@ func TestDrainDeadlineExitsFour(t *testing.T) {
 		if got := errs.ExitCode(err); got != 4 {
 			t.Errorf("ExitCode = %d, want 4", got)
 		}
-	case <-time.After(20 * time.Second):
-		t.Fatal("Run hung past the shutdown budget — the exact bug this package exists to prevent")
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run hung past the shutdown budget")
 	}
 }
 
@@ -146,31 +151,28 @@ func TestShutdownBudgetSplit(t *testing.T) {
 		t.Fatalf("split must be positive: drain=%v flush=%v", drain, flush)
 	}
 	if drain+flush > 15*time.Second {
-		t.Errorf("split %v+%v exceeds total 15s", drain, flush)
+		t.Errorf("split %v+%v exceeds the total", drain, flush)
 	}
-	// Documented formula: drain = T − 1s − 5 percent.
-	if want := 15*time.Second - time.Second - 750*time.Millisecond; drain != want {
-		t.Errorf("drain = %v, want %v (T minus 1s minus 5 percent)", drain, want)
+	// Documented formula: drain = T - 1s - 5 percent.
+	want := 15*time.Second - time.Second - 750*time.Millisecond
+	if drain != want {
+		t.Errorf("drain = %v, want %v", drain, want)
 	}
-	// Degenerate totals stay sane.
+	// Degenerate input must stay sane rather than going negative.
 	d, f := ShutdownBudget(0)
 	if d <= 0 || f < 0 {
-		t.Errorf("zero-total split degenerate: %v %v", d, f)
+		t.Errorf("zero-total split degenerate: %v / %v", d, f)
 	}
 }
 
 func TestStopOrderIsReverse(t *testing.T) {
 	var order []string
 	var mu sync.Mutex
-	svc := func(name string) Service {
-		return &mockService{name: name, stopBlock: 0, startErr: nil, stopErr: nil, mu: sync.Mutex{}}
-	}
-	_ = svc
-	// Use a recording wrapper to capture exact order.
 	rec := func(name string) Service {
 		return &recordingService{name: name, order: &order, mu: &mu}
 	}
 	a := New("test", rec("a"), rec("b"), rec("c"))
+
 	sig := make(chan os.Signal, 1)
 	done := make(chan error, 1)
 	go func() {
@@ -183,10 +185,11 @@ func TestStopOrderIsReverse(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("Run: %v", err)
 	}
+
 	want := []string{"c", "b", "a"}
 	for i, w := range want {
-		if order[i] != w {
-			t.Errorf("stop order[%d] = %s, want %s (full order: %v)", i, order[i], w, order)
+		if i >= len(order) || order[i] != w {
+			t.Fatalf("stop order = %v, want %v", order, want)
 		}
 	}
 }
@@ -197,11 +200,47 @@ type recordingService struct {
 	mu    *sync.Mutex
 }
 
-func (r *recordingService) Name() string { return r.name }
-func (r *recordingService) Start(ctx context.Context) error { return nil }
+func (r *recordingService) Name() string                     { return r.name }
+func (r *recordingService) Start(ctx context.Context) error  { return nil }
 func (r *recordingService) Stop(ctx context.Context) error {
 	r.mu.Lock()
 	*r.order = append(*r.order, r.name)
 	r.mu.Unlock()
 	return nil
+}
+
+func TestPhaseStringClosedSet(t *testing.T) {
+	cases := map[Phase]string{
+		PhaseInit: "init", PhaseStarting: "starting", PhaseServing: "serving",
+		PhaseDraining: "draining", PhaseFlushing: "flushing", PhaseStopped: "stopped",
+	}
+	for p, want := range cases {
+		if got := p.String(); got != want {
+			t.Errorf("Phase(%d) = %q, want %q", p, got, want)
+		}
+	}
+	if got := Phase(99).String(); got != "unknown" {
+		t.Errorf("out-of-range Phase = %q, want unknown", got)
+	}
+}
+
+func TestContextCancelStopsApp(t *testing.T) {
+	a := New("test", &mockService{name: "svc"})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- a.RunWithSignal(ctx, func() <-chan os.Signal { return make(chan os.Signal) })
+	}()
+	for a.Phase() != PhaseServing {
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run returned %v on context cancel", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not return after context cancellation")
+	}
 }

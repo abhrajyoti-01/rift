@@ -1,6 +1,3 @@
-// Package picker holds the load balancing pickers (TECHNICAL_SPEC §4.2).
-// Implementations MUST be safe for concurrent use and MUST NOT allocate
-// on the pick path (NFR-2).
 package picker
 
 import (
@@ -11,7 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	lbmodel "github.com/rift/rift/internal/lb/model"
+	lbmodel "github.com/abhrajyoti-01/rift/internal/lb/model"
 )
 
 // ErrNoUpstream is returned when no healthy backend exists in a pool.
@@ -28,6 +25,14 @@ type Picker interface {
 	Pick(ctx context.Context, hint PickHint) (*lbmodel.Backend, error)
 }
 
+// Picker kind identifiers. These are the closed set accepted by New and
+// referenced by configuration.
+const (
+	RoundRobin     = "round_robin"
+	WeightedRR     = "weighted_round_robin"
+	LeastConns     = "least_connections"
+)
+
 // New builds from config; kind ∈ round_robin | weighted_round_robin |
 // least_connections. Backends are shared with the pool snapshot and
 // read-only after construction.
@@ -36,11 +41,11 @@ func New(kind string, pool *lbmodel.Pool) (Picker, error) {
 		return nil, fmt.Errorf("picker: nil pool")
 	}
 	switch kind {
-	case "round_robin":
+	case RoundRobin, "":
 		return &roundRobin{backends: pool.Backends}, nil
-	case "weighted_round_robin":
+	case WeightedRR:
 		return newSmoothWRR(pool.Backends)
-	case "least_connections":
+	case LeastConns:
 		return &leastConns{backends: pool.Backends}, nil
 	default:
 		return nil, fmt.Errorf("picker: unknown kind %q", kind)
@@ -78,8 +83,8 @@ func (r *roundRobin) Pick(ctx context.Context, hint PickHint) (*lbmodel.Backend,
 // smoothWRR is nginx-style smooth weighted round-robin: cw[i] += w[i];
 // pick argmax(cw); cw[arg] -= total. Interleaves heavy backends (no burst
 // of k consecutive picks for weight k), max-min fair. One mutex over the
-// small integer slice; contention is measured (PERFORMANCE_SPEC OC-3) —
-// a sharded variant replaces it only on superlinear G-scaling evidence.
+// small integer slice; contention is measured — a sharded variant replaces
+// it only on superlinear scaling evidence.
 type smoothWRR struct {
 	mu       sync.Mutex
 	backends []*lbmodel.Backend

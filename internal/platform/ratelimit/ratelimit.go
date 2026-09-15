@@ -1,8 +1,3 @@
-// Package ratelimit provides per-key token buckets over a sharded key map
-// with bounded cardinality (TECHNICAL_SPEC §2.2). FNV-1a-64 hashing with
-// shard selection on high bits spreads spoofed sources across shards
-// instead of serializing them on one mutex. Eviction is counted, never
-// silent: an unbounded key map is a memory-exhaustion primitive.
 package ratelimit
 
 import (
@@ -28,17 +23,17 @@ type bucket struct {
 type shard struct {
 	mu  sync.Mutex
 	m   map[string]*list.Element // key → LRU element (payload *bucket)
-	lru list.List                 // front = most recently used
+	lru list.List                // front = most recently used
 }
 
 // Sharded is the bounded-cardinality per-key limiter.
 type Sharded struct {
-	shards    []shard
-	capacity  int // total tracked keys across shards
-	mask      uint64
-	keyCount  atomic.Int64 // distinct keys; incremented insert, decremented evict
-	evicted   atomic.Uint64
-	now       func() time.Time // injected for synctest (AR-8)
+	shards   []shard
+	capacity int // total tracked keys across shards
+	mask     uint64
+	keyCount atomic.Int64 // distinct keys; incremented insert, decremented evict
+	evicted  atomic.Uint64
+	now      func() time.Time // injected clock
 }
 
 // NewSharded builds a sharded limiter. shards is rounded to a power of two
@@ -90,7 +85,7 @@ func (s *Sharded) shardFor(key string) *shard {
 }
 
 // EvictedTotal reports how many keys lost their token history to LRU
-// eviction — the honesty counter behind rift_ratelimit_keys_evicted_total.
+// eviction.
 func (s *Sharded) EvictedTotal() uint64 { return s.evicted.Load() }
 
 // KeysTracked reports current distinct keys (exact when quiesced;

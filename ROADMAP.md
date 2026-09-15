@@ -1,169 +1,206 @@
-# ROADMAP.md — RIFT Implementation Roadmap
+# RIFT Roadmap
 
-Status: **Revision A**. Phases are cumulative; each ends with "functional
-early" increments (nothing postponed to the end, per the brief). Acceptance
-per phase references T-IDs (TESTING_SPEC) and NFR/FR IDs (PRD). "Owner" is
-the phase's accountable implementer; all phases assume the 15 docs are
-committed and internally consistent before Phase 0 code starts.
+Phases are cumulative. A phase is complete when its exit criteria are met and
+verified, not when its code exists.
+
+Status marks: ✅ done · ◐ partial · 🔜 not started.
 
 ---
 
-## Phase 0 — Toolchain, Experiments, CI Rails (1 week equivalent)
+## Phase 0 — Foundation ✅
 
-**Objective:** make every later decision measurable; no service code.
+**Objective:** a repository that can build, test, and be reasoned about.
 
-- Repo rails: Makefile, `.golangci.yml` (depguard enforcing AR-1, `gofmt`/
-  `goimports`, `revive`), `gosec` in CI, CI workflow (test + race + bench
-  gate), `.gitignore`, issue/PR templates (docs-only repo polish).
-- Experiments **E1–E7** (PERFORMANCE_SPEC §3) in `experiments/`: standalone
-  `main.go` programs + committed result files in `bench/results/`. Each is a
-  real program: E1 transfers 1 GiB through `TCPConn.ReadFrom` and
-  `strace -c`-counts syscalls; E3 runs iperf3/latency across loopback,
-  host↔WSL2, and a netns pair.
-- Docker inside WSL2 provisioned (currently absent on host — verified); compose
-  reference topology file written but *not yet exercised* (honestly marked).
-- **Fills**: UD-1 (E3), UD-2 (E1), UD-3 (E2), UD-4 (E6) → specs amended in
-  the same commits as results.
-- **Tests**: experiment programs self-verify (byte hashes, syscall-count
-  assertions).
-- **Acceptance**: E1–E7 result files committed; spec `[E-n]` cells filled
-  from them only; CI green on empty-tree test path; `bench/env` card renders.
-- **Risks**: WSL2 kernel gaps (E1/E2 may show no splice/reuseport benefit →
-  fallback paths ship, documented); Docker Desktop install friction.
-- **Dependencies**: none beyond toolchain.
+| Deliverable | Status |
+|---|---|
+| Go module with pinned toolchain | ✅ `go 1.25.5` |
+| Package layout matching the architecture | ✅ |
+| Error taxonomy and exit-code mapping | ✅ |
+| Compiling skeleton for every subsystem | ✅ superseded by real implementations |
 
-## Phase 1 — Platform Layer (2 weeks)
+**Exit criteria:** `go build ./...` and `go test ./...` succeed. ✅
 
-**Objective:** the shared substrate all three services build on; compiling,
-tested, no placeholders.
+---
 
-- Packages (`internal/platform/`): `errs`, `config` (YAML load/validate/
-  redact/diff/watch), `logging`, `lifecycle` (phases, errgroup, signals,
-  drain budgets), `health`, `metrics` (registry, bucket sets, label-set
-  enforcement test), `httpx` (server factory, middleware, TLS profiles),
-  `netx` (listeners, keepalive, `Guard`), `pool`, `ratelimit`, `circuit`,
-  `retry`, `testsupport` (Echo, Blackhole, SlowConn, Chaos, goleak main).
-- `cmd/rift`: subcommand skeleton, `init`, `config validate`, `config diff`,
-  `version` (real: reads build info).
-- **Tests**: unit per package; synctest suites for retry/breaker/lifecycle
-  budgets; label-set fuzz; redaction golden; goleak TestMain wired.
-  Benchmarks: `BenchmarkPick` stubs' substrates (pool, ratelimit shards).
-- **Acceptance**: `go vet ./... && go test -race ./...` green; `rift init |
-  rift config validate` round-trips (T-92/95); goleak clean; `platform` has
-  zero subsystem imports (depguard green).
-- **Risks**: over-engineering (guard: platform packages ship only what a
-  service will use within one phase — no speculative `buffer`/`dns`/`tls`
-  packages, AR-4).
-- **Dependencies**: Phase 0 CI rails.
+## Phase 1 — Platform Primitives ✅
 
-## Phase 2 — Load Balancer (3 weeks)
+**Objective:** the shared substrate every service depends on.
 
-**Objective:** functional LB: L4 TCP + L7 HTTP, three pickers, health, limits,
-reload, metrics.
-
-- Packages: `lb/model`, `lb/picker`, `lb/health`, `lb/l4`, `lb/l7`, `lb/udp`,
-  `lb/control`.
-- Features in order: pickers → health → L4 (copy modes both, splice default
-  per E1) → L7 (ReverseProxy seams, retry table, XFF) → limits/rate-limit →
-  admin API + SIGHUP reload → UDP sessions (late in phase, after L4 soak).
-- **Tests**: T-12..T-49 progressively; fuzz on Range n/a here; χ² and
-  interleave distribution tests; reload-under-load (G8).
-- **Benchmarks**: NFR-1/2/12 asserted; scenario runner v0 (closed loop) for
-  `lb.http.small`, `lb.l4.bulk`; first Nginx parity run.
-- **Acceptance**: all LB v1 FRs green (T-trace report); NFR-1/2/12 recorded;
-  reload-under-load zero drops; goleak clean across all fault tests.
-- **Risks**: WRR mutex contention (measured via G-sweep, sharded variant only
-  if superlinear); Windows dev gaps on socket options (Linux CI compensates).
-- **Dependencies**: Phase 1 platform.
-
-## Phase 3 — DNS + TLS Monitor (3 weeks)
-
-**Objective:** wire engine, resolver engines, two views, node + hub, TLS
-prober, alerts — all real.
-
-- Packages: `dnsmon/wire` (+ fuzz corpus), `dnsmon/resolver`, `dnsmon/probe`,
-  `dnsmon/model`, `dnsmon/node`, `dnsmon/hub`, `tlsmon/model`, `tlsmon/probe`.
-- Features in order: wire (encode/decode/fuzz first — parser hardening before
-  any socket touches it) → resolver engine → recursive view → authoritative
-  view → node ring/shipper → hub ingest/window/segments → classifier →
-  alerts → TLS prober → one-shot CLI tools.
-- **Tests**: T-51..T-65 progressively; `dig` equivalence (network-gated);
-  two-node netns integration (T-61); spool round-trip; alert boundaries via
-  synctest.
-- **Benchmarks**: NFR-10 asserted; `dns.throughput`, `dns.flood` scenarios.
-- **Acceptance**: all DNS/TLS v1 FRs green; fuzz corpus committed and
-  nightly-clean; NFR-9 flood test green; hub replay round-trips (T-62).
-- **Risks**: public-resolver variability in CI (network-gated tests opt-in
-  with local unbound-in-WSL2 fallback resolver for determinism); NS churn
-  test realism.
-- **Dependencies**: Phase 1 platform; Phase 2's `netx.Guard` hardening
-  (shared).
-
-## Phase 4 — Media Server (2 weeks)
-
-**Objective:** range server at measured bandwidth; playersim instrument.
-
-- Packages: `media/model` (Range parse + fuzz, Asset/Index types),
-  `media/server` (handler, admission, index builder); `bench/playersim`.
-- Features in order: range parser (fuzzed first) → GET/HEAD + 206/416 →
-  sendfile path + fadvise → buffered mode (E5 decides default) → limits/
-  admission → index → metrics → playersim.
-- **Tests**: T-81..T-88b; traversal suite; 10-GiB memory assertion; seek
-  storm; delete-mid-stream.
-- **Benchmarks**: `media.4k.x10`, `media.lossless`, `media.capacity-ramp`;
-  NFR-7/8 recorded; playersim startup/stall numbers separate from server
-  metrics.
-- **Acceptance**: all media v1 FRs green; NFR-7 ratio vs measured ceilings
-  recorded; E5 result committed with shipped default justified.
-- **Risks**: WSL2 disk path distortion (fio ceiling + card honesty, AD-11);
-  sparse-file fixtures vs real fragmentation (both used: sparse for memory
-  tests, real files for throughput).
-- **Dependencies**: Phase 1 platform; Phase 2's loadgen scaffolding.
-
-## Phase 5 — Bench, Baselines, Reports, Docs (2 weeks)
-
-**Objective:** the measurement machine complete; v1 claims evidenced.
-
-- Packages: `bench/env`, `bench/loadgen` (open-loop scheduling + HDR, E6
-  decided), `bench/harness` (run/compare/report/trace), dashboards
-  (`deploy/grafana/`), Prometheus rules, nginx baseline config set.
-- Scenario definitions: all named scenarios from PERFORMANCE_SPEC §4
-  versioned in `bench/scenarios/`.
-- Soak/stress/parity: 2 h soak assertions; Nginx parity with alternated runs;
-  wrk2 cross-check; report regeneration byte-identical (G6).
-- **Acceptance**: every NFR has a measured value committed in
-  `bench/results/`; report regenerates from samples; traceability report
-  shows every v1 FR/NFR → green T-ID; README quickstart reproduces from
-  clean clone; dashboards validate against live registries.
-- **Risks**: tolerance-band calibration (first baselines need care to avoid
-  either always-green or always-red bands); wrk2 availability in WSL2.
-- **Dependencies**: Phases 2–4.
-
-## Phase 6+ — Milestones (post-v1, no placeholders, each fully designed before start)
-
-| Milestone | Content | Precondition |
+| Deliverable | Status | Tests |
 |---|---|---|
-| M1 | Geographic nodes (real second-site node) | Two-network deployment available |
-| M2 | DNSSEC validation; CAA/SRV/PTR; DoH/DoT | Wire engine soak |
-| M3 | Consistent-hash picker; passive health | LB distributions green |
-| M4 | HLS/CMAF packaging (external FFmpeg, real segments) | Media throughput story proven |
-| M5 | Webhook alert delivery; Grafana OnCall | Alert conditions stable |
-| M6 | TLS 1.0/1.1 opt-in scanning | Compliance use case |
-| M7 | `madvise`/readahead tuning, O_DIRECT (E5 follow-up) | Profile justifies |
-| M7b | `io_uring` exploration | Real Linux host (AD-12) |
-| M8 | Media token auth | Non-LAN exposure |
-| M9 | Hub query API v2 (aggregations) | Real analytical need |
-| M10 | OTel tracing (AD-13 reversal condition) | Cross-network spans justified |
+| `errs` — taxonomy, wrapping, exit codes | ✅ | 5 |
+| `netx` — SSRF dial guard, listeners | ✅ | 9 |
+| `config` — strict YAML, validation, redaction, diff, env | ✅ | 15 |
+| `pool` — bounded executor | ✅ | 6 |
+| `ratelimit` — sharded token buckets with bounded cardinality | ✅ | 6 |
+| `circuit` — breaker with injectable clock | ✅ | 5 |
+| `retry` — policy with closed retryable class set | ✅ | 6 |
 
-## Definition of v1 Complete (PRD §9 restated operationally)
+**Exit criteria:** every primitive has tests that assert its contract,
+including the failure modes (bounded memory, refused overflow, fail-closed
+configuration). ✅
 
-1. All v1 FRs trace to green T-IDs in the traceability report.
-2. All NFRs have measured values (committed result files), no `[E-n]` cells
-   empty.
-3. `bench/baselines/perf-baseline.json` bands calibrated; CI gate live.
-4. One command regenerates each component report from committed samples.
-5. README quickstart reproduces from a clean clone in WSL2.
-6. The forbidden-claims grep (PERFORMANCE_SPEC §5a) passes over all docs.
+---
 
-Until all six hold, README states exactly which claims are evidenced and
-which remain open — no "production ready" claim before the evidence.
+## Phase 2 — Load Balancer ✅
+
+**Objective:** real forwarding on all three transports.
+
+| Deliverable | Status | Tests |
+|---|---|---|
+| TCP forwarding with admission, failover, half-close | ✅ | 7 |
+| UDP sessions with per-session affinity and sweep | ✅ | 6 |
+| HTTP reverse proxy with owned transport | ✅ | 11 |
+| Three pickers with distribution assertions | ✅ | 12 |
+| Active health checks with hysteresis | ✅ | 10 |
+| Zero-allocation pick path | ✅ | asserted |
+| Closed retry table | ✅ | 11 cases |
+| Snapshot control plane and reload | ✅ | 9 |
+| Admin API with authorization | ✅ | red-line tested |
+| Live end-to-end verification | ✅ | request proxied to a real backend |
+
+**Exit criteria:** byte equivalence in both copy modes; reload retains the
+previous snapshot on invalid input; open-proxy refusal proven by test. ✅
+
+**Not in this phase:** TLS termination (validated in config, not yet
+implemented), per-source rate-limit wiring, reuse-ratio metrics.
+
+---
+
+## Phase 3 — DNS Monitoring ✅ / ◐
+
+**Objective:** observe resolver state honestly and aggregate it.
+
+| Deliverable | Status | Tests |
+|---|---|---|
+| Wire codec with TTLs, rcode, TC, size caps | ✅ | codec present; fuzz targets 🔜 |
+| Resolver engine with UDP→TCP fallback | ✅ | present |
+| Recursive-view probing and canonicalization | ✅ | fingerprint tests |
+| Six-state propagation classifier | ✅ | 12 |
+| Bounded ring with attributed drops | ✅ | 3 |
+| Batch shipping with size/age triggers | ✅ | 4 |
+| Shutdown flush without data loss | ✅ | regression test |
+| Bounded offline spool | ✅ | 2 |
+| Hub ingest with validation and caps | ✅ | 6 |
+| Bounded window and JSONL segments | ✅ | 2 |
+| Query API | ✅ | 3 |
+| Two-node aggregation | ✅ | 1 |
+| Live end-to-end verification | ✅ | node → hub → query |
+| Authoritative-view NS discovery | 🔜 | — |
+| mTLS identity binding | 🔜 | — |
+| Alert evaluation | 🔜 | — |
+
+**Exit criteria met:** the pipeline runs end to end against real resolvers, and
+the classifier returns `unresolvable` rather than a false "converged" when it
+lacks ground truth. ✅
+
+---
+
+## Phase 4 — TLS Monitoring ✅
+
+| Deliverable | Status | Tests |
+|---|---|---|
+| Handshake capture + manual verification inversion | ✅ | 8 |
+| Closed finding-code set | ✅ | contract |
+| Expiry, weak key, weak signature detection | ✅ | 3 |
+| Hostname independence from chain trust | ✅ | regression test |
+| Strict compliance mode | ✅ | 1 |
+| SSRF-guarded targets | ✅ | 1 |
+| Live verification against a public host | ✅ | TLS 1.3 negotiated, chain reported |
+
+---
+
+## Phase 5 — Media Serving ✅
+
+| Deliverable | Status | Tests |
+|---|---|---|
+| RFC 7233 parsing | ✅ | 23-case matrix |
+| 206 / 416 / 200 semantics | ✅ | 9 cases + live verification |
+| Strong ETags and `If-Range` | ✅ | 2 |
+| Path traversal refusal | ✅ | 10 attacks |
+| Admission limits | ✅ | 2 |
+| Filesystem index with exclusions | ✅ | 1 |
+| Sendfile and buffered modes | ✅ | live `206` |
+| SIGHUP index rebuild | ✅ | wired |
+| Bounded per-stream memory | ✅ | structural |
+
+---
+
+## Phase 6 — Benchmark Harness ◐
+
+| Deliverable | Status | Tests |
+|---|---|---|
+| Environment card | ✅ | CLI |
+| Open/closed-loop runner with raw samples | ✅ | 5 |
+| Intended-start recording | ✅ | 1 |
+| Percentile summary | ✅ | 1 |
+| Tolerance-band comparison | ✅ | 3 |
+| Report with mandatory card | ✅ | 2 |
+| Scenario registry | ✅ | 3 scenarios |
+| Player model | ◐ | implementation present, no measurement |
+| Soak/stress automation | 🔜 | — |
+| Nginx baseline comparison | 🔜 | — |
+
+---
+
+## Phase 7 — Observability Completion 🔜
+
+| Deliverable | Status |
+|---|---|
+| Prometheus `/metrics` on the admin plane | 🔜 |
+| Label-cardinality enforcement test | 🔜 |
+| Full structured-log wiring | ◐ |
+| Grafana dashboards | 🔜 |
+| Alert rules | 🔜 |
+| Project-wide goroutine-leak assertions | 🔜 |
+
+---
+
+## Phase 8 — Measurement 🔜
+
+**Blocked on a suitable Linux host, not on code.**
+
+| Deliverable | Status |
+|---|---|
+| Environment card for the benchmark host | 🔜 |
+| `iperf3` / `fio` ceiling measurement | 🔜 |
+| Every `[unmeasured]` target in `PERFORMANCE.md` §6 | 🔜 |
+| Published reports with cards | 🔜 |
+| Nginx comparison with alternating runs | 🔜 |
+
+**This phase produces the only performance claims the project will ever make.**
+
+---
+
+## Milestones (post-v1)
+
+Each is fully designed before implementation; none is a stub today.
+
+| # | Milestone | Precondition |
+|---|---|---|
+| M1 | TLS termination on LB listeners with cert reload | Phase 2 follow-up |
+| M2 | Per-source and per-pool rate-limit wiring in the LB | Phase 2 follow-up |
+| M3 | Authoritative-view NS discovery | DNS wire maturity |
+| M4 | mTLS identity binding for node ingest | certificate tooling |
+| M5 | Alert evaluation and delivery | threshold semantics stable |
+| M6 | Geographic multi-node deployment | a second real network |
+| M7 | Hub persistence replay tooling (`rift dns replay`) | segment format stable |
+| M8 | Fuzz targets for the wire parser and range parser | — |
+| M9 | DNSSEC validation | wire engine maturity |
+| M10 | Media token authentication | non-LAN exposure |
+| M11 | HLS/CMAF packaging | throughput story proven |
+| M12 | OpenTelemetry tracing | cross-network spans justified |
+
+---
+
+## Definition of Done for v1
+
+1. Every ✅ in `PRD.md` has a passing test in CI.
+2. Every `[unmeasured]` in `PERFORMANCE.md` has a committed measurement **with
+   its environment card**.
+3. Reports regenerate from stored samples without re-running.
+4. `go build`, `go vet`, and `go test -race` are all green.
+5. No document claims a capability that `PRD.md` marks as 🔜.
+
+Until all five hold, the README states exactly which claims are evidenced and
+which remain open.

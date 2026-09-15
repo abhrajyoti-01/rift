@@ -1,0 +1,11 @@
+{
+  "name": "lb.http.closed.200",
+  "tool": "rift",
+  "target": "http://127.0.0.1:8080/",
+  "duration_ms": 30000,
+  "warmup_ms": 5000,
+  "loop": "closed",
+  "conns": 200,
+  "method": "GET",
+  "keep_alive_fraction": 1.0
+}

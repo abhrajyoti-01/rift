@@ -5,18 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rift/rift/internal/platform/errs"
+	"github.com/abhrajyoti-01/rift/internal/platform/errs"
 )
 
 func TestAttemptBudget(t *testing.T) {
-	p := Policy{MaxAttempts: 3, Backoff: Backoff{Base: 10 * time.Millisecond, Cap: 1 * time.Second}}
+	p := Policy{MaxAttempts: 3, Backoff: Backoff{Base: 10 * time.Millisecond, Cap: time.Second}}
 	netErr := errs.New(errs.ClassNetwork, "test", "dial failed")
 
-	// Attempt 0 failed → attempt 1 allowed; 1 failed → 2 allowed; 2
-	// failed → budget exhausted (3 total attempts).
 	for n := 0; n < 2; n++ {
 		if _, ok := p.Attempt(context.Background(), n, netErr); !ok {
-			t.Fatalf("attempt %d should be retryable within budget 3", n)
+			t.Fatalf("attempt %d should be retryable within a budget of 3", n)
 		}
 	}
 	if _, ok := p.Attempt(context.Background(), 2, netErr); ok {
@@ -31,42 +29,34 @@ func TestMaxAttemptsOneDisablesRetry(t *testing.T) {
 	}
 }
 
-func TestNonRetryableClassNeverRetries(t *testing.T) {
+// TestRetryableClassSet is the safety contract: the classes that must never
+// be retried.
+func TestRetryableClassSet(t *testing.T) {
 	p := Policy{MaxAttempts: 5}
-	// Security, config, resource, peer-closed are never retryable under
-	// the default predicate — the closed-set rule (AD-15 posture).
 	for _, class := range []errs.Class{
 		errs.ClassSecurity, errs.ClassConfig, errs.ClassResource, errs.ClassPeerClosed,
 	} {
-		e := errs.New(class, "t", "x")
-		if _, ok := p.Attempt(context.Background(), 0, e); ok {
+		if _, ok := p.Attempt(context.Background(), 0, errs.New(class, "t", "x")); ok {
 			t.Errorf("class %v must never be retryable by default", class)
 		}
 	}
-	// Network and timeout are.
 	for _, class := range []errs.Class{errs.ClassNetwork, errs.ClassTimeout} {
-		e := errs.New(class, "t", "x")
-		if _, ok := p.Attempt(context.Background(), 0, e); !ok {
+		if _, ok := p.Attempt(context.Background(), 0, errs.New(class, "t", "x")); !ok {
 			t.Errorf("class %v should be retryable by default", class)
 		}
 	}
 }
 
-func TestBackoffExponentialAndCap(t *testing.T) {
+func TestBackoffExponentialWithCap(t *testing.T) {
 	p := Policy{
 		MaxAttempts: 10,
 		Backoff:     Backoff{Base: 10 * time.Millisecond, Cap: 100 * time.Millisecond},
 	}.withDefaults()
-	// No jitter for determinism here.
 	p.Backoff.Jitter = 0
 
 	want := []time.Duration{
-		10 * time.Millisecond,  // after attempt 0
-		20 * time.Millisecond, // after attempt 1
-		40 * time.Millisecond,
-		80 * time.Millisecond,
-		100 * time.Millisecond, // capped (160 would exceed)
-		100 * time.Millisecond,
+		10 * time.Millisecond, 20 * time.Millisecond, 40 * time.Millisecond,
+		80 * time.Millisecond, 100 * time.Millisecond, 100 * time.Millisecond,
 	}
 	for n, w := range want {
 		if got := p.delayFor(n); got != w {
@@ -75,24 +65,25 @@ func TestBackoffExponentialAndCap(t *testing.T) {
 	}
 }
 
-func TestJitterBounded(t *testing.T) {
+func TestJitterStaysBounded(t *testing.T) {
 	p := Policy{
 		MaxAttempts: 10,
 		Backoff:     Backoff{Base: 100 * time.Millisecond, Cap: time.Second, Jitter: 0.5},
 	}.withDefaults()
 	for i := 0; i < 200; i++ {
-		d := p.delayFor(3) // base delay 800ms
+		d := p.delayFor(3) // base 800ms
 		if d < 400*time.Millisecond || d > 800*time.Millisecond {
 			t.Fatalf("jittered delay %v outside [400ms, 800ms]", d)
 		}
 	}
 }
 
-func TestNilErrProceeds(t *testing.T) {
-	// A nil error on Attempt means "previous attempt did not fail" — used
-	// by schedulers polling for a slot. Budget rules still apply.
+func TestNilErrorProceedsWithinBudget(t *testing.T) {
 	p := Policy{MaxAttempts: 2}
 	if _, ok := p.Attempt(context.Background(), 0, nil); !ok {
-		t.Fatal("nil err should be proceedable within budget")
+		t.Fatal("nil error should be proceedable within budget")
+	}
+	if _, ok := p.Attempt(context.Background(), 1, nil); ok {
+		t.Fatal("budget must still apply with a nil error")
 	}
 }
