@@ -151,6 +151,45 @@ dns:
 	}
 }
 
+// TestSpoolDirMustBeAPath is a regression guard: the node's spool directory
+// was once derived by appending to the hub URL, producing a path containing
+// "://" and silently disabling the offline buffer.
+func TestSpoolDirMustBeAPath(t *testing.T) {
+	bad := `
+dns:
+  role: node
+  node_id: n1
+  hub: {url: "http://127.0.0.1:9001"}
+  spool_dir: "http://127.0.0.1:9001.spool"
+  resolvers: [{addr: "1.1.1.1:53"}]
+  targets: [{name: "x.", type: A}]
+`
+	_, _, err := Load(writeTemp(t, bad))
+	if err == nil {
+		t.Fatal("a URL used as spool_dir must be rejected")
+	}
+	if !strings.Contains(err.Error(), "spool_dir") {
+		t.Errorf("error should name the field: %v", err)
+	}
+
+	good := `
+dns:
+  role: node
+  node_id: n1
+  hub: {url: "http://127.0.0.1:9001"}
+  spool_dir: /var/lib/rift/spool
+  resolvers: [{addr: "1.1.1.1:53"}]
+  targets: [{name: "x.", type: A}]
+`
+	s, _, err := Load(writeTemp(t, good))
+	if err != nil {
+		t.Fatalf("filesystem spool_dir should be accepted: %v", err)
+	}
+	if s.DNS.SpoolDir != "/var/lib/rift/spool" {
+		t.Errorf("spool_dir = %q", s.DNS.SpoolDir)
+	}
+}
+
 func TestMediaValidation(t *testing.T) {
 	bad := `
 media:

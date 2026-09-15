@@ -116,6 +116,7 @@ decorative:
 | Config required `media.root` even when media was unused | config tests | Requirement made conditional |
 | Resolver validator rejected valid `1.1.1.1:53` | `rift config validate` | Literal-IP check split host/port |
 | Spool filenames collided within one clock tick, so two batches overwrote each other and byte accounting disagreed with disk | `TestNodeDrainSpool` (intermittent) | Monotonic sequence in the filename |
+| Node spool directory was built by appending to the hub **URL**, producing a path containing `://` — the offline buffer silently never worked | code review of the CLI wiring | Dedicated `dns.spool_dir` field, validated to reject URLs (`TestSpoolDirMustBeAPath`) |
 
 ---
 

@@ -142,8 +142,12 @@ type DNS struct {
 	ShipEvery  Duration    `yaml:"ship_every"`
 	ShipSize   int         `yaml:"ship_size"`
 	SpoolMax   ByteSize    `yaml:"spool_max"`
-	Hub        HubRef      `yaml:"hub"`
-	HubServer  HubServer   `yaml:"hub_server"`
+	// SpoolDir is where observations are written while the hub is
+	// unreachable. Empty disables the spool entirely (shipping failures then
+	// count against dropped_ring_full instead of being buffered to disk).
+	SpoolDir  string   `yaml:"spool_dir"`
+	Hub       HubRef   `yaml:"hub"`
+	HubServer HubServer `yaml:"hub_server"`
 }
 
 // Resolver is one upstream DNS resolver engine configuration.
@@ -583,6 +587,15 @@ func (v *violations) dns(d *DNS) {
 		}
 		if d.SpoolMax < 0 || d.SpoolMax > 1<<30 {
 			v.add("dns.spool_max", "must be within [0, 1 GiB]")
+		}
+		// A spool_dir that looks like a URL is a config mistake: the spool is
+		// a filesystem path, and a URL here would create a directory named
+		// after the scheme (or fail outright), silently disabling the offline
+		// buffer that protects against hub outages.
+		if d.SpoolDir != "" {
+			if strings.Contains(d.SpoolDir, "://") {
+				v.add("dns.spool_dir", "must be a filesystem path, not a URL")
+			}
 		}
 		if d.Interval.D() < 0 {
 			v.add("dns.interval", "must not be negative")

@@ -54,6 +54,10 @@ dns:
   ship_every: 5s
   ship_size: 64
   spool_max: 1MiB
+  # Observations are written here while the hub is unreachable, so a hub
+  # restart becomes a recoverable gap rather than silent loss. Omit the key
+  # to disable the spool entirely.
+  spool_dir: ./bench/results/node-spool
   resolvers:
     # Resolver addresses must be literal IP:port. The monitor does not use
     # DNS to bootstrap itself, so a hostname here is a validation error.
