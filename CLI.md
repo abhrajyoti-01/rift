@@ -145,7 +145,7 @@ dns node: test-node (test-lab) → http://127.0.0.1:19001
 Runs the aggregation hub: mTLS ingest plane and query plane.
 
 ```
-$ rift dns hub --config rift.hub.yaml
+$ rift dns hub --config rift.hub.dev.yaml
 dns hub: ingest 127.0.0.1:19001 query 127.0.0.1:19002 data ./bench/results/hubdata
 ```
 

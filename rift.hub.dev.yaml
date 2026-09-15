@@ -1,0 +1,52 @@
+# DEVELOPMENT CONFIGURATION — NOT FOR PRODUCTION
+#
+# This file enables plaintext ingest so the hub can be exercised locally
+# without provisioning certificates. Validation refuses plaintext ingest on
+# any routable bind, but a loopback-only listener is still unauthenticated:
+# anything on this host can post observations to it.
+#
+# For a real deployment, remove `allow_plaintext_ingest` and provide the mTLS
+# material instead:
+#
+#     server_cert_file: /etc/rift/hub.crt
+#     server_key_file:  /etc/rift/hub.key
+#     client_ca_file:   /etc/rift/nodes-ca.crt
+#
+# See SECURITY.md section 4 for the current state of node identity binding.
+
+observability:
+  log_level: info
+  log_format: json
+  admin_addr: 127.0.0.1:9000
+  shutdown_timeout: 15s
+
+dns:
+  role: hub
+  hub_server:
+    ingest_addr: 127.0.0.1:19001
+    query_addr: 127.0.0.1:19002
+    # Loopback-only, development-only. Refused by validation on a routable
+    # bind; see the header comment.
+    allow_plaintext_ingest: true
+    data_dir: ./bench/results/hubdata
+    window_keys: 1024
+    segment_bytes: 4MiB
+    min_responding: 2
+    convergence_window: 5m
+
+media:
+  bind: 127.0.0.1:18081
+  root: ./bench/fixtures
+  max_streams: 16
+  max_streams_per_client: 4
+  io_mode: sendfile
+  readahead: 1MiB
+  read_header_timeout: 10s
+  idle_timeout: 120s
+  write_timeout: 300s
+  disk_high_water: 0.9
+
+bench:
+  scenario_dir: bench/scenarios
+  results_dir: bench/results
+  timeout: 300s

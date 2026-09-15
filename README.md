@@ -102,15 +102,18 @@ findings none
 ## Run the services
 
 ```bash
-# Load balancer: TCP, UDP, and HTTP listeners plus an admin plane
-go run ./cmd/rift lb --config rift.yaml
+# Load balancer: TCP, UDP, and HTTP listeners plus a loopback admin plane
+go run ./cmd/rift lb --config rift.example.yaml
 
-# DNS monitoring: hub first, then any number of nodes
-go run ./cmd/rift dns hub --config rift.hub.yaml
-go run ./cmd/rift dns node --config rift.yaml
+# DNS monitoring: start the hub, then any number of nodes.
+# rift.hub.dev.yaml is loopback-only and enables plaintext ingest for local
+# use; a real deployment uses mTLS (see SECURITY.md section 4).
+go run ./cmd/rift dns hub --config rift.hub.dev.yaml
+go run ./cmd/rift dns node --config rift.example.yaml
 
-# Media server with a live index that rebuilds on SIGHUP
-go run ./cmd/rift media --config rift.yaml
+# Media server with a live index that rebuilds on SIGHUP.
+# Generate the fixture first: go run ./scripts/makefixture.go
+go run ./cmd/rift media --config rift.example.yaml
 ```
 
 Verified end to end:

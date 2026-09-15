@@ -171,6 +171,11 @@ is designed and not yet wired. Until it is, the correct deployment is to run
 ingest on a trusted network or behind a terminating proxy that performs mTLS.
 This is stated rather than implied away.
 
+For local development, `rift.hub.dev.yaml` sets `allow_plaintext_ingest: true`
+and binds loopback. Validation **refuses that option on any routable bind**, and
+the file carries a header comment saying it is not a deployment template. A
+loopback listener is still unauthenticated to anything else on the same host.
+
 ---
 
 ## 5. TLS Monitoring

@@ -1,3 +1,20 @@
+# RIFT example configuration — LOCAL DEVELOPMENT
+#
+# Every listener binds loopback and the node points at a local hub. This is
+# a starting point for exercising the services on one machine, not a
+# deployment template.
+#
+# For production, note the differences that matter:
+#   - bind the data plane to a routable address, not 127.0.0.1
+#   - enable the admin plane's remote access deliberately (allow_remote plus
+#     an admin_token_file), or keep it on loopback
+#   - configure the hub for mTLS and have the node present a client
+#     certificate (see rift.hub.dev.yaml for the development alternative)
+#   - add TLS termination on the LB listeners that need it
+#
+# Validate any edit before running it:
+#   rift config validate --config rift.example.yaml
+
 observability:
   log_level: info
   log_format: json
@@ -38,6 +55,8 @@ dns:
   ship_size: 64
   spool_max: 1MiB
   resolvers:
+    # Resolver addresses must be literal IP:port. The monitor does not use
+    # DNS to bootstrap itself, so a hostname here is a validation error.
     - {addr: "1.1.1.1:53", concurrency: 4, timeout: 2s}
   targets:
     - {zone: "example.com.", name: "example.com.", type: A, view: recursive}
@@ -50,6 +69,7 @@ tls:
   expiry_crit_days: 3
   consecutive_failures: 3
   targets:
+    # verify: report records findings; verify: strict fails instead.
     - {host: "example.com", port: 443, floor: "1.2", verify: report}
 
 media:
