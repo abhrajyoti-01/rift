@@ -9,7 +9,7 @@
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)](https://github.com/abhrajyoti-01/rift)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](CONTRIBUTING.md)
 
-**A production-grade Go networking toolkit for mission-critical infrastructure**
+**Rift is a Go networking toolkit for mission-critical infrastructure**
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Architecture](#-architecture) • [Contributing](#-contributing)
 

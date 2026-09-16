@@ -1,0 +1,144 @@
+# RIFT Production Configuration Template
+#
+# This is a production-ready configuration template with security best practices.
+# Review and customize all settings before deployment.
+#
+# Security Requirements:
+#   ✓ TLS 1.3 minimum for all external connections
+#   ✓ mTLS for internal service communication
+#   ✓ Admin plane authentication via token file
+#   ✓ Rate limiting enabled
+#   ✓ Resource limits configured
+#   ✓ Comprehensive monitoring enabled
+
+observability:
+  log_level: info
+  log_format: json
+  admin_addr: 0.0.0.0:9000
+  allow_remote: true
+  admin_token_file: /etc/rift/admin.token
+  shutdown_timeout: 30s
+
+lb:
+  listeners:
+    - id: https_frontend
+      proto: http
+      bind: 0.0.0.0:443
+      pool: backend_pool
+      max_conns: 50000
+      tls:
+        cert_file: /etc/rift/tls/server.crt
+        key_file: /etc/rift/tls/server.key
+        min_version: "1.3"
+    
+    - id: tcp_proxy
+      proto: tcp
+      bind: 0.0.0.0:8443
+      pool: tcp_backend_pool
+      max_conns: 10000
+
+  pools:
+    - id: backend_pool
+      picker: least_connections
+      backends:
+        - {id: backend1, addr: "10.0.1.10:8080", weight: 1}
+        - {id: backend2, addr: "10.0.1.11:8080", weight: 1}
+        - {id: backend3, addr: "10.0.1.12:8080", weight: 1}
+      health:
+        kind: http
+        interval: 10s
+        timeout: 3s
+        rise: 3
+        fall: 2
+        method: GET
+        path: /healthz
+        expect: [200, 204]
+      timeouts:
+        dial: 5s
+        idle: 120s
+        copy: 60s
+        write: 30s
+      retry:
+        max_attempts: 2
+        backoff: 100ms
+        max_backoff: 1s
+      rate_limit:
+        per_source:
+          per_second: 100
+          burst: 200
+        per_pool:
+          per_second: 10000
+          burst: 15000
+
+    - id: tcp_backend_pool
+      picker: round_robin
+      backends:
+        - {id: tcp_backend1, addr: "10.0.2.10:9000", weight: 1}
+        - {id: tcp_backend2, addr: "10.0.2.11:9000", weight: 1}
+      health:
+        kind: tcp
+        interval: 5s
+        timeout: 2s
+        rise: 2
+        fall: 3
+      max_sessions: 10000
+      session_ttl: 300s
+
+  trusted_proxies:
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+  forwarded: standard
+  idempotent_put_delete: false
+
+dns:
+  role: node
+  node_id: production-node-01
+  location: us-east-1a
+  interval: 60s
+  ring_cap: 65536
+  ship_every: 10s
+  ship_size: 1024
+  spool_max: 128MiB
+  spool_dir: /var/lib/rift/spool
+  
+  resolvers:
+    - {addr: "1.1.1.1:53", concurrency: 16, timeout: 3s}
+    - {addr: "8.8.8.8:53", concurrency: 16, timeout: 3s}
+    - {addr: "9.9.9.9:53", concurrency: 16, timeout: 3s}
+  
+  targets:
+    - {zone: "example.com.", name: "api.example.com.", type: A, view: recursive}
+    - {zone: "example.com.", name: "api.example.com.", type: AAAA, view: recursive}
+    - {zone: "example.com.", name: "www.example.com.", type: A, view: recursive}
+  
+  hub:
+    url: "https://hub.example.com:19001"
+    client_cert_file: /etc/rift/tls/node-client.crt
+    client_key_file: /etc/rift/tls/node-client.key
+    ca_cert_file: /etc/rift/tls/ca.crt
+
+tls:
+  interval: 3600s
+  expiry_warn_days: 30
+  expiry_crit_days: 7
+  consecutive_failures: 3
+  targets:
+    - {host: "api.example.com", port: 443, floor: "1.3", verify: strict}
+    - {host: "www.example.com", port: 443, floor: "1.3", verify: strict}
+
+media:
+  bind: 0.0.0.0:8081
+  root: /srv/media
+  max_streams: 512
+  max_streams_per_client: 8
+  io_mode: sendfile
+  readahead: 4MiB
+  read_header_timeout: 10s
+  idle_timeout: 300s
+  write_timeout: 600s
+  disk_high_water: 0.85
+
+bench:
+  scenario_dir: /etc/rift/bench/scenarios
+  results_dir: /var/lib/rift/bench/results
+  timeout: 600s
