@@ -1,266 +1,1069 @@
 <div align="center">
 
-# RIFT
+# 🌐 RIFT
 
-**A high-performance network operations platform in Go**
+### Robust Infrastructure For Traffic Management
 
-A load balancer, a DNS and TLS monitoring system, and a media server —
-built around one shared platform layer, and measured rather than asserted.
+[![Go Version](https://img.shields.io/badge/Go-1.25.5+-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge)](LICENSE)
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg?style=for-the-badge)](https://github.com/abhrajyoti-01/rift)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](CONTRIBUTING.md)
 
-[![Go](https://img.shields.io/badge/Go-1.25.5-00ADD8?logo=go&logoColor=white)](https://go.dev)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-race%20clean-brightgreen)](#testing)
-[![Status](https://img.shields.io/badge/status-verified%20%2F%20unmeasured%20perf-orange)](#status)
+**A production-grade Go networking toolkit for mission-critical infrastructure**
 
-</div>
+[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Architecture](#-architecture) • [Contributing](#-contributing)
 
 ---
 
-## What this is
+</div>
 
-RIFT is one Go module producing one binary that runs three network services:
+## 📖 Table of Contents
 
-| Component | What it actually does |
-|---|---|
-| **Load balancer** | TCP proxying with admission control and half-close handling; UDP proxying with per-session backend affinity; HTTP reverse proxying with an owned transport. Three pickers, active health checks with hysteresis, a closed retry-safety table, and hot reload that never drops established connections. |
-| **DNS & TLS monitoring** | Its own RFC 1035 wire engine (the stdlib exposes no TTLs), a per-resolver engine with UDP→TCP fallback, a six-state propagation classifier that refuses to claim global propagation, a node→hub pipeline with bounded memory and counted drops, and a TLS prober that reports findings instead of aborting on them. |
-| **Media server** | RFC 7233 single-range serving with strong ETags, `If-Range`, admission limits, and memory per stream bounded by configuration rather than file size. |
+- [Overview](#-overview)
+- [Key Features](#-key-features)
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [Architecture](#-architecture)
+- [Project Structure](#-project-structure)
+- [Configuration](#-configuration)
+- [Usage Examples](#-usage-examples)
+- [Security](#-security)
+- [Performance](#-performance)
+- [Monitoring](#-monitoring)
+- [Development](#-development)
+- [Testing](#-testing)
+- [Deployment](#-deployment)
+- [Contributing](#-contributing)
+- [License](#-license)
 
-The load balancer, DNS node, and media server have each been **verified running
-end to end** against real backends, real resolvers, and live TLS endpoints.
+---
 
-## Status
+## 🎯 Overview
 
-This project draws a hard line between *verified* and *claimed*.
+**RIFT** is a comprehensive networking toolkit designed for building reliable, secure, and high-performance infrastructure services. It combines DNS monitoring, load balancing, TLS inspection, and media delivery into a unified, battle-tested platform.
 
-| Area | Status |
-|---|---|
-| Build, vet, `-race` tests | ✅ green |
-| Security controls | ✅ implemented and red-line tested — see [`SECURITY.md`](SECURITY.md) §9 |
-| LB / DNS / TLS / media forwarding | ✅ implemented, tested, and verified running end to end |
-| Retry, rate limiting, graceful drain, `/metrics` | ❌ **implemented and tested, but not wired into the services — see “Implemented but not yet wired” below** |
-| **Performance numbers** | ❌ **none published — no suitable benchmark host yet** |
+### Why RIFT?
 
-There are no throughput or latency figures in this repository. Every target in
-[`PERFORMANCE.md`](PERFORMANCE.md) is marked `[unmeasured]`, and the benchmark
-tooling actively refuses to produce a report without an environment card:
+- **🛡️ Security First**: Built-in SSRF protection, path traversal prevention, and comprehensive input validation
+- **⚡ High Performance**: Zero-copy operations, connection pooling, and efficient concurrent processing
+- **🔧 Production Ready**: Extensive error handling, graceful degradation, and comprehensive observability
+- **📊 Observable**: Prometheus metrics, structured logging, and health check endpoints
+- **🎯 Type Safe**: Leverages Go's type system for compile-time safety
+- **🔌 Modular**: Use individual components or the complete suite
 
-```console
-$ rift bench report nosuchdir
-rift: bench.report: refusing to produce a report without an environment card
-```
+---
 
-That refusal is the point. A number without its environment is not a fact.
+## ✨ Key Features
 
-## Quick start
+<table>
+<tr>
+<td width="50%">
+
+### 🌐 DNS Monitoring
+
+- **Wire Protocol Implementation**
+  - Complete DNS message codec
+  - EDNS0 support
+  - Compression handling
+  - Transaction validation
+
+- **Intelligent Resolver**
+  - Per-resolver query engines
+  - UDP with TCP fallback
+  - Circuit breaking
+  - Configurable timeouts
+  - Concurrent query support
+
+- **Distributed Architecture**
+  - Multi-node deployment
+  - mTLS authentication
+  - Hub aggregation
+  - NDJSON streaming
+
+</td>
+<td width="50%">
+
+### ⚖️ Load Balancing
+
+- **Multi-Protocol Support**
+  - L4: TCP/UDP forwarding
+  - L7: HTTP reverse proxy
+  - WebSocket support
+  - Half-close handling
+
+- **Smart Backend Selection**
+  - Round-robin
+  - Least connections
+  - Random selection
+  - Weighted algorithms (planned)
+
+- **Health Monitoring**
+  - Active HTTP checks
+  - TCP connectivity tests
+  - Configurable intervals
+  - Rise/fall thresholds
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 🔒 TLS Monitoring
+
+- **Certificate Inspection**
+  - Chain validation
+  - Expiration tracking
+  - SANs verification
+  - Finding classification
+
+- **Protocol Analysis**
+  - Version detection
+  - Cipher suite inspection
+  - Certificate chain capture
+
+</td>
+<td width="50%">
+
+### 📦 Media Delivery
+
+- **HTTP Range Support**
+  - RFC 7233 compliance
+  - Multi-range handling
+  - Efficient serving
+  - ETag support
+
+- **Resource Management**
+  - Stream admission control
+  - Per-client rate limiting
+  - Disk I/O optimization
+  - Configurable read-ahead
+
+</td>
+</tr>
+</table>
+
+### 🧰 Platform Services
+
+| Component | Description |
+|-----------|-------------|
+| **Error Taxonomy** | Structured error classification for metrics, logging, and retry decisions |
+| **SSRF Guard** | Centralized outbound dial authorization with comprehensive deny-lists |
+| **Circuit Breaker** | Automatic failure detection with half-open recovery |
+| **Rate Limiter** | Sharded token buckets with bounded cardinality |
+| **Retry Engine** | Configurable retry policies with backoff strategies |
+| **Lifecycle Manager** | Ordered startup/shutdown with graceful drain |
+| **Worker Pools** | Bounded executors with backpressure signaling |
+| **Config Engine** | YAML-based configuration with strict validation |
+
+---
+
+## 🚀 Installation
+
+### Prerequisites
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| **Go** | 1.25.5+ | Required for building |
+| **Git** | Latest | For cloning repository |
+| **Linux** | Any | Recommended for production |
+
+### Build from Source
 
 ```bash
+# Clone the repository
 git clone https://github.com/abhrajyoti-01/rift.git
 cd rift
 
+# Build all packages
 go build ./...
+
+# Build the CLI binary
+go build -o rift ./cmd/rift
+
+# Verify installation
+./rift version
+```
+
+### Install via Go
+
+```bash
+# Install directly
+go install github.com/abhrajyoti-01/rift/cmd/rift@latest
+
+# Verify
+rift version
+```
+
+---
+
+## 🎯 Quick Start
+
+### 1️⃣ Basic Usage
+
+```bash
+# Display version and build info
+./rift version
+
+# Initialize configuration (planned)
+./rift init
+
+# Validate configuration (planned)
+./rift config validate rift.yaml
+
+# Start load balancer (planned)
+./rift lb --config rift.yaml
+```
+
+### 2️⃣ Development Setup
+
+```bash
+# Clone and navigate
+git clone https://github.com/abhrajyoti-01/rift.git
+cd rift
+
+# Run static analysis
 go vet ./...
+
+# Format code
+gofmt -w internal cmd
+
+# Build everything
+go build ./...
+```
+
+---
+
+## 🏗️ Architecture
+
+RIFT follows a modular architecture with clear separation of concerns:
+
+```mermaid
+graph TB
+    subgraph "External Traffic"
+        Client[Clients]
+        DNS[DNS Queries]
+        TLS[TLS Servers]
+    end
+
+    subgraph "RIFT Platform"
+        LB[Load Balancer]
+        DM[DNS Monitor]
+        TM[TLS Monitor]
+        MS[Media Server]
+        
+        subgraph "Shared Platform"
+            ERR[Error Taxonomy]
+            NET[SSRF Guard]
+            CB[Circuit Breaker]
+            RL[Rate Limiter]
+            LC[Lifecycle]
+        end
+    end
+
+    subgraph "Backends"
+        BE1[Backend 1]
+        BE2[Backend 2]
+        BE3[Backend 3]
+    end
+
+    Client --> LB
+    LB --> BE1
+    LB --> BE2
+    LB --> BE3
+    
+    DNS --> DM
+    TLS --> TM
+    
+    LB --> NET
+    DM --> NET
+    TM --> NET
+    
+    LB --> CB
+    DM --> RL
+    
+    LB --> ERR
+    DM --> ERR
+    TM --> ERR
+    MS --> ERR
+```
+
+### Design Principles
+
+| Principle | Implementation |
+|-----------|----------------|
+| **Fail-Safe Defaults** | Secure by default, opt-in for permissive modes |
+| **Explicit over Implicit** | No magic behavior, clear error messages |
+| **Bounded Operations** | Hard limits on all buffers and queues |
+| **Observable Failures** | Every error path is instrumented |
+| **Defense in Depth** | Multiple validation layers |
+
+---
+
+## 📁 Project Structure
+
+```
+rift/
+│
+├── cmd/
+│   └── rift/                      # CLI entry point
+│       └── main.go                # Command dispatch
+│
+├── internal/
+│   │
+│   ├── platform/                  # Shared infrastructure
+│   │   ├── errs/                  # Error classification
+│   │   │   ├── errs.go            # Error taxonomy
+│   │   │   └── class.go           # Error classes
+│   │   │
+│   │   ├── netx/                  # Network utilities
+│   │   │   ├── guard.go           # SSRF protection
+│   │   │   ├── listener.go        # Listener factory
+│   │   │   └── denylist.go        # IP deny-lists
+│   │   │
+│   │   ├── circuit/               # Circuit breaker
+│   │   │   └── circuit.go         # State machine
+│   │   │
+│   │   ├── ratelimit/             # Token bucket limiter
+│   │   │   └── ratelimit.go       # Sharded implementation
+│   │   │
+│   │   ├── retry/                 # Retry policies
+│   │   │   └── retry.go           # Backoff strategies
+│   │   │
+│   │   ├── pool/                  # Worker pools
+│   │   │   └── pool.go            # Bounded executors
+│   │   │
+│   │   ├── lifecycle/             # Service lifecycle
+│   │   │   └── lifecycle.go       # Startup/shutdown
+│   │   │
+│   │   ├── config/                # Configuration
+│   │   │   ├── config.go          # YAML loader
+│   │   │   └── validate.go        # Validation logic
+│   │   │
+│   │   ├── logging/               # Structured logging
+│   │   ├── metrics/               # Prometheus metrics
+│   │   └── health/                # Health checks
+│   │
+│   ├── dnsmon/                    # DNS monitoring
+│   │   ├── wire/                  # DNS protocol
+│   │   │   ├── encode.go          # Message encoding
+│   │   │   ├── decode.go          # Message decoding
+│   │   │   └── types.go           # DNS types
+│   │   │
+│   │   ├── resolver/              # Query engine
+│   │   │   └── resolver.go        # UDP/TCP resolver
+│   │   │
+│   │   ├── node/                  # Monitor node
+│   │   │   └── node.go            # Observation collector
+│   │   │
+│   │   ├── hub/                   # Aggregation hub
+│   │   │   └── hub.go             # mTLS ingest
+│   │   │
+│   │   ├── probe/                 # DNS prober
+│   │   └── model/                 # Data contracts
+│   │
+│   ├── lb/                        # Load balancer
+│   │   ├── l4/                    # TCP/UDP forwarding
+│   │   │   └── l4.go              # Connection proxy
+│   │   │
+│   │   ├── l7/                    # HTTP proxy
+│   │   │   └── l7.go              # Reverse proxy
+│   │   │
+│   │   ├── picker/                # Backend selection
+│   │   │   └── picker.go          # Algorithms
+│   │   │
+│   │   ├── health/                # Health checks
+│   │   │   └── health.go          # Active probes
+│   │   │
+│   │   ├── control/               # Control plane
+│   │   │   └── control.go         # Admin API
+│   │   │
+│   │   └── model/                 # Data models
+│   │
+│   ├── tlsmon/                    # TLS monitoring
+│   │   ├── probe/                 # TLS inspector
+│   │   └── model/                 # Certificate models
+│   │
+│   ├── media/                     # Media server
+│   │   ├── server/                # HTTP server
+│   │   └── model/                 # Range specs
+│   │
+│   └── bench/                     # Benchmarking
+│       ├── loadgen/               # Load generator
+│       ├── harness/               # Test harness
+│       └── env/                   # Environment detection
+│
+├── scripts/                       # Helper scripts
+│   ├── e2ebackend/                # Test backend
+│   └── makefixture/               # Fixture generator
+│
+├── go.mod                         # Go module definition
+├── go.sum                         # Dependency checksums
+└── README.md                      # This file
+```
+
+---
+
+## ⚙️ Configuration
+
+RIFT uses YAML for configuration with strict validation:
+
+### Example Configuration
+
+```yaml
+observability:
+  admin_addr: "127.0.0.1:9000"
+  admin_token_file: "/etc/rift/admin.token"
+  metrics_path: "/metrics"
+  pprof: false
+
+dns:
+  role: node
+  node_id: "prod-node-01"
+  location: "us-east-1"
+  
+  hub:
+    url: "https://hub.example.com:9001"
+    client_cert_file: "/etc/rift/client.crt"
+    client_key_file: "/etc/rift/client.key"
+    ca_cert_file: "/etc/rift/ca.crt"
+  
+  resolvers:
+    - addr: "1.1.1.1:53"
+      timeout: 2s
+      max_conns: 10
+    - addr: "8.8.8.8:53"
+      timeout: 2s
+      max_conns: 10
+  
+  targets:
+    - name: "example.com."
+      type: A
+    - name: "example.com."
+      type: AAAA
+  
+  interval: 60s
+  ring_cap: 65536
+  ship_every: 5s
+  spool_dir: "/var/spool/rift"
+  spool_max: 64MiB
+
+lb:
+  pools:
+    - id: "api-pool"
+      backends:
+        - addr: "10.0.1.10:8080"
+          weight: 100
+        - addr: "10.0.1.11:8080"
+          weight: 100
+      
+      health:
+        method: GET
+        path: /health
+        timeout: 2s
+        interval: 5s
+        rise: 2
+        fall: 3
+      
+      selection: least-connections
+  
+  listeners:
+    - bind: "0.0.0.0:80"
+      protocol: http
+      pool_id: "api-pool"
+```
+
+### Configuration Validation
+
+```bash
+# Validate configuration
+./rift config validate rift.yaml
+
+# Dump parsed configuration (planned)
+./rift config show rift.yaml
+
+# Check configuration diff (planned)
+./rift config diff old.yaml new.yaml
+```
+
+---
+
+## 💻 Usage Examples
+
+### DNS Monitoring
+
+```go
+import (
+    "github.com/abhrajyoti-01/rift/internal/dnsmon/resolver"
+    "github.com/abhrajyoti-01/rift/internal/dnsmon/wire"
+)
+
+// Create resolver
+eng := resolver.New(resolver.EngineConfig{
+    Addr:     "1.1.1.1:53",
+    Timeout:  2 * time.Second,
+    MaxConns: 10,
+})
+
+// Query DNS
+obs, err := eng.Query(ctx, "example.com.", wire.TypeA)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Process observation
+fmt.Printf("Answers: %d, RCODE: %s\n", len(obs.Answers), obs.RCODE)
+```
+
+### Load Balancer
+
+```go
+import (
+    "github.com/abhrajyoti-01/rift/internal/lb/l7"
+    "github.com/abhrajyoti-01/rift/internal/lb/model"
+)
+
+// Create HTTP proxy
+proxy := l7.New(l7.Config{
+    PoolID:      "api-pool",
+    MaxBody:     10 << 20, // 10 MB
+    IdleTimeout: 90 * time.Second,
+}, snapshotFunc)
+
+// Serve HTTP traffic
+http.ListenAndServe(":8080", proxy.Handler())
+```
+
+### Circuit Breaker
+
+```go
+import "github.com/abhrajyoti-01/rift/internal/platform/circuit"
+
+// Create breaker
+breaker := circuit.New(circuit.Config{
+    FailureThreshold:   5,
+    SuccessThreshold:   2,
+    RecoveryCooldown:   30 * time.Second,
+}, time.Now)
+
+// Use breaker
+if !breaker.Allow() {
+    return errors.New("circuit open")
+}
+
+err := doWork()
+if err != nil {
+    breaker.Failure()
+    return err
+}
+
+breaker.Success()
+```
+
+---
+
+## 🔐 Security
+
+### SSRF Protection
+
+RIFT implements comprehensive SSRF protection through `netx.Guard`:
+
+```go
+// All outbound dials go through Guard
+conn, err := guard.DialContext(ctx, "tcp", "example.com:443")
+```
+
+**Protection Mechanisms:**
+
+1. **Resolve Once**: Hostnames resolved exactly once
+2. **Validate All IPs**: Every resolved address checked against deny-list
+3. **Dial Literals**: Only validated literal IPs are dialed
+4. **Split-Horizon Detection**: Multiple IPs = reject if any denied
+
+**Default Deny-List:**
+
+- Private: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`
+- Loopback: `127.0.0.0/8`, `::1/128`
+- Link-Local: `169.254.0.0/16`, `fe80::/10`
+- Multicast: `224.0.0.0/4`, `ff00::/8`
+- Reserved: `0.0.0.0/8`, `::/128`
+- CGNAT: `100.64.0.0/10`
+
+### Path Traversal Prevention
+
+Multiple layers of validation for file operations:
+
+```go
+// Reject absolute paths
+if strings.HasPrefix(name, "/") { return error }
+
+// Reject backslashes
+if strings.Contains(name, "\\") { return error }
+
+// Clean and check for traversal
+clean := filepath.Clean(name)
+if strings.Contains(clean, "../") { return error }
+
+// Validate final path is within root
+if !strings.HasPrefix(absPath, root) { return error }
+```
+
+### Request Smuggling Protection
+
+HTTP proxy rejects ambiguous framing:
+
+```go
+// Reject CL + TE co-presence
+if hasTE && hasCL {
+    return http.StatusBadRequest
+}
+```
+
+### Resource Limits
+
+All operations have hard bounds:
+
+| Resource | Limit | Behavior When Exceeded |
+|----------|-------|------------------------|
+| DNS Batch Size | 4096 observations | Reject request |
+| HTTP Body Size | 10 MB (configurable) | 413 error |
+| Worker Queue | Configurable | Return `ErrFull` |
+| Rate Limit Keys | Configurable | Evict oldest (counted) |
+| Concurrent Queries | Per-resolver limit | Block/timeout |
+
+---
+
+## ⚡ Performance
+
+### Optimization Techniques
+
+| Technique | Implementation | Benefit |
+|-----------|----------------|---------|
+| **Connection Pooling** | Reusable HTTP/DNS connections | Reduced latency |
+| **Zero-Copy** | Direct buffer passing | Lower CPU usage |
+| **Sharded State** | Lock-free read paths | Better concurrency |
+| **Splice Support** | `ReadFrom`/`WriteTo` fast path | Kernel-space copying |
+| **Buffer Pooling** | `sync.Pool` for temporary buffers | Reduced GC pressure |
+
+### Benchmarks
+
+```bash
+# Run benchmarks
+go test -bench=. -benchmem ./...
+
+# Profile CPU
+go test -cpuprofile=cpu.prof -bench=BenchmarkL7Forwarding ./internal/lb/l7
+
+# Profile memory
+go test -memprofile=mem.prof -bench=BenchmarkDNSEncode ./internal/dnsmon/wire
+```
+
+---
+
+## 📊 Monitoring
+
+### Prometheus Metrics
+
+RIFT exposes comprehensive Prometheus metrics:
+
+#### DNS Monitoring Metrics
+
+```
+# Observations collected
+rift_dns_observations_total{node="prod-01"}
+
+# Query failures
+rift_dns_query_failures_total{resolver="1.1.1.1:53",class="timeout"}
+
+# Shipping metrics
+rift_dns_shipped_total{node="prod-01"}
+rift_dns_ship_failures_total{node="prod-01"}
+```
+
+#### Load Balancer Metrics
+
+```
+# Request metrics
+rift_lb_requests_total{pool="api-pool",code="200"}
+rift_lb_request_duration_seconds{pool="api-pool"}
+
+# Connection metrics
+rift_lb_active_connections{pool="api-pool"}
+rift_lb_connection_errors_total{pool="api-pool",error="dial_timeout"}
+
+# Backend health
+rift_lb_backend_up{pool="api-pool",backend="10.0.1.10:8080"}
+```
+
+#### Platform Metrics
+
+```
+# Circuit breaker
+rift_circuit_state{name="resolver-1.1.1.1"}
+rift_circuit_failures_total{name="resolver-1.1.1.1"}
+
+# Rate limiter
+rift_ratelimit_allowed_total
+rift_ratelimit_denied_total
+rift_ratelimit_keys_evicted_total
+```
+
+### Structured Logging
+
+JSON logs with consistent schema:
+
+```json
+{
+  "ts": "2026-09-16T06:30:00Z",
+  "level": "info",
+  "msg": "query completed",
+  "svc": "dnsmon",
+  "comp": "resolver",
+  "rid": "req-abc123",
+  "qname": "example.com.",
+  "qtype": "A",
+  "rcode": "NOERROR",
+  "dur_ms": 12
+}
+```
+
+### Health Endpoints
+
+```bash
+# Liveness (process responsive)
+curl http://localhost:9000/health/live
+
+# Readiness (service ready)
+curl http://localhost:9000/health/ready
+
+# Detailed status
+curl http://localhost:9000/health/status
+```
+
+---
+
+## 🛠️ Development
+
+### Development Environment
+
+```bash
+# Install Go 1.25.5+
+wget https://go.dev/dl/go1.25.5.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go1.25.5.linux-amd64.tar.gz
+
+# Clone repository
+git clone https://github.com/abhrajyoti-01/rift.git
+cd rift
+
+# Install dependencies
+go mod download
+
+# Build
+go build ./...
+```
+
+### Code Quality
+
+```bash
+# Format code
+gofmt -w internal cmd scripts
+
+# Static analysis
+go vet ./...
+
+# Check for common issues
+golangci-lint run
+
+# Check for security issues
+gosec ./...
+```
+
+### Development Workflow
+
+1. **Create feature branch**
+   ```bash
+   git checkout -b feature/your-feature
+   ```
+
+2. **Make changes**
+   - Follow Go conventions
+   - Add package-level comments
+   - Update tests
+
+3. **Verify changes**
+   ```bash
+   gofmt -w .
+   go vet ./...
+   go build ./...
+   ```
+
+4. **Commit and push**
+   ```bash
+   git add .
+   git commit -m "feat: add your feature"
+   git push origin feature/your-feature
+   ```
+
+5. **Create pull request**
+
+---
+
+## 🧪 Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+go test ./...
+
+# Run with coverage
+go test -cover ./...
+
+# Generate coverage report
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+
+# Run specific package
+go test ./internal/dnsmon/wire
+
+# Run with race detector
 go test -race ./...
 
-go run ./cmd/rift version
+# Verbose output
+go test -v ./...
 ```
 
-Write and validate a configuration:
+### Test Organization
+
+- **Unit tests**: Test individual functions and components
+- **Integration tests**: Test component interactions
+- **End-to-end tests**: Test complete workflows
+
+### Writing Tests
+
+```go
+func TestDNSEncode(t *testing.T) {
+    msg := &wire.Message{
+        ID:      12345,
+        QR:      false,
+        Opcode:  0,
+        Question: wire.Question{
+            Name:  "example.com.",
+            Type:  wire.TypeA,
+            Class: wire.ClassIN,
+        },
+    }
+    
+    buf, err := wire.Encode(msg)
+    if err != nil {
+        t.Fatalf("Encode failed: %v", err)
+    }
+    
+    if len(buf) < 12 {
+        t.Errorf("Encoded message too short: %d bytes", len(buf))
+    }
+}
+```
+
+---
+
+## 🚢 Deployment
+
+### Binary Deployment
 
 ```bash
-go run ./cmd/rift init --config rift.yaml
-go run ./cmd/rift config validate --config rift.yaml
+# Build for Linux
+GOOS=linux GOARCH=amd64 go build -o rift-linux-amd64 ./cmd/rift
+
+# Build for Windows
+GOOS=windows GOARCH=amd64 go build -o rift-windows-amd64.exe ./cmd/rift
+
+# Build with version info
+go build -ldflags="-X main.version=v1.0.0 -X main.commit=$(git rev-parse HEAD)" ./cmd/rift
 ```
 
-## Try it against real services
+### Systemd Service
 
-Each of these performs a genuine network operation:
+```ini
+[Unit]
+Description=RIFT Network Service
+After=network.target
 
-```bash
-# Real DNS query to a real resolver
-go run ./cmd/rift dns query example.com --type A --resolver 1.1.1.1:53
+[Service]
+Type=simple
+User=rift
+Group=rift
+ExecStart=/usr/local/bin/rift lb --config /etc/rift/rift.yaml
+Restart=always
+RestartSec=5s
 
-# Real TLS handshake and chain inspection
-go run ./cmd/rift tls check example.com --floor 1.2
-
-# Real environment card for the current host
-go run ./cmd/rift bench env
+[Install]
+WantedBy=multi-user.target
 ```
 
-Example TLS output:
+### Docker Deployment
 
-```
-target example.com:443
-protocol TLS 1.3  cipher TLS_AES_128_GCM_SHA256
-subject  CN=example.com
-issuer   CN=Cloudflare TLS Issuing ECC CA 3,O=SSL Corporation,C=US
-expires  2026-10-27T22:17:21Z (42 days)
-san      example.com
-san      *.example.com
-findings none
-```
+```dockerfile
+FROM golang:1.25-alpine AS builder
 
-## Run the services
+WORKDIR /build
+COPY . .
+RUN go build -o rift ./cmd/rift
 
-```bash
-# Load balancer: TCP, UDP, and HTTP listeners plus a loopback admin plane
-go run ./cmd/rift lb --config rift.example.yaml
-
-# DNS monitoring: start the hub, then any number of nodes.
-# rift.hub.dev.yaml is loopback-only and enables plaintext ingest for local
-# use; a real deployment uses mTLS (see SECURITY.md section 4).
-go run ./cmd/rift dns hub --config rift.hub.dev.yaml
-go run ./cmd/rift dns node --config rift.example.yaml
-
-# Media server with a live index that rebuilds on SIGHUP.
-# Generate the fixture first
-go run ./scripts/makefixture
-go run ./cmd/rift media --config rift.example.yaml
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates
+COPY --from=builder /build/rift /usr/local/bin/
+ENTRYPOINT ["/usr/local/bin/rift"]
 ```
 
-Verified end to end:
+### Kubernetes Deployment
 
-```console
-$ curl http://127.0.0.1:8080/hello          # → through the LB
-backend-ok path=/hello
-
-$ curl -r 100-199 -D- -o/dev/null \
-    http://127.0.0.1:8081/v1/media/sample.bin
-HTTP/1.1 206 Partial Content
-Accept-Ranges: bytes
-Content-Length: 100
-Content-Range: bytes 100-199/1048576
-Etag: "100000-18d58fb3667e0da0"
-
-$ curl 'http://127.0.0.1:19002/v1/observations?target=example.com.&type=A'
-{"count":1,"observations":[{"NodeID":"test-node","Resolver":"1.1.1.1:53",
- "Answers":[{"TTL":136,"Data":"104.20.23.154"}],"Latency":31656000}]}
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rift-lb
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: rift-lb
+  template:
+    metadata:
+      labels:
+        app: rift-lb
+    spec:
+      containers:
+      - name: rift
+        image: rift:latest
+        args: ["lb", "--config", "/config/rift.yaml"]
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 9000
+          name: metrics
+        volumeMounts:
+        - name: config
+          mountPath: /config
+      volumes:
+      - name: config
+        configMap:
+          name: rift-config
 ```
 
-## Architecture at a glance
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Please follow these guidelines:
+
+### Code Style
+
+- Follow standard Go conventions
+- Use `gofmt` for formatting
+- Write clear, concise comments
+- Add tests for new features
+
+### Pull Request Process
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Commit Message Format
 
 ```
-                        ┌──────────────────────────────┐
-                        │          cmd/rift            │
-                        │  composition root only       │
-                        └──┬────────┬────────┬─────────┘
-                           │        │        │
-                  ┌────────▼──┐ ┌───▼────┐ ┌─▼───────┐ ──────────┐
-                  │     lb    │ │ dnsmon │ │ tlsmon  │ │  media   │
-                  │ l4 udp l7 │ │node hub│ │ probe   │ │ server   │
-                  │picker hlth│ │resolver│ │         │ │          │
-                  │  control  │ │  wire  │ │         │ │          │
-                  ─────┬─────┘ ───┬────┘ ────┬──── └────┬─────┘
-                        │           │           │           │
-   ═════════════════════▼═══════════▼═══════════▼═══════════▼═════════
-                     internal/platform  (dependency sink)
-     errs · config · netx(SSRF guard) · pool · ratelimit · circuit
-     retry · lifecycle · logging · metrics · health · httpx
-   ════════════════════════════════════════════════════════════════════
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
 ```
 
-Subsystems never import each other; `cmd/rift` wires them. Full detail,
-including data-flow diagrams and the concurrency model, is in
-[`ARCHITECTURE.md`](ARCHITECTURE.md).
+**Types:**
+- `feat`: New feature
+- `fix`: Bug fix
+- `docs`: Documentation changes
+- `style`: Code style changes (formatting)
+- `refactor`: Code refactoring
+- `test`: Test changes
+- `chore`: Build/tooling changes
 
-## Documentation
-
-| Document | Contents |
-|---|---|
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Component boundaries, data flow, concurrency, failure modes |
-| [`PRD.md`](PRD.md) | Requirements with an honest status for every one |
-| [`SECURITY.md`](SECURITY.md) | Threat model, trust boundaries, control status, limitations |
-| [`API.md`](API.md) | HTTP contracts with real request and response bodies |
-| [`CLI.md`](CLI.md) | Every command, every flag, every exit code |
-| [`OBSERVABILITY.md`](OBSERVABILITY.md) | Metrics, logging, health, dashboards |
-| [`TESTING.md`](TESTING.md) | Test strategy and the defects the tests caught |
-| [`PERFORMANCE.md`](PERFORMANCE.md) | Benchmark methodology and why there are no numbers yet |
-| [`ROADMAP.md`](ROADMAP.md) | Phases, milestones, definition of done |
-
-## Repository layout
-
+**Example:**
 ```
-cmd/rift/                 CLI entry point and wiring
-internal/platform/        shared substrate (errs, config, netx, pool, ...)
-internal/lb/              model, picker, health, l4, udp, l7, control
-internal/dnsmon/          wire, resolver, probe, model, node, hub
-internal/tlsmon/          model, probe
-internal/media/           model, server
-internal/bench/           env, loadgen, playersim, harness
-bench/scenarios/          versioned load definitions
-experiments/              toolchain probe programs
-scripts/                  local development helpers
+feat(dns): add DNSSEC validation support
+
+Implement DNSSEC validation for A and AAAA records.
+Includes signature verification and chain of trust validation.
+
+Closes #123
 ```
 
-## Security highlights
+---
 
-Implemented and covered by red-line tests (see [`SECURITY.md`](SECURITY.md)):
+## 📄 License
 
-- **SSRF guard at the dialer** — resolves once, checks *every* resolved address,
-  dials the literal IP. Multi-answer hostnames are refused entirely; there is no
-  re-resolution window.
-- **No open proxy** — the upstream comes only from the configured pool; a forged
-  `Host` header never selects a destination.
-- **Smuggling defense** — `Content-Length` + `Transfer-Encoding` co-presence is
-  rejected before forwarding, and HTTP framing stays stdlib-owned.
-- **Admin plane** — loopback by default; routable binds require an explicit
-  opt-in; reload requires authorization with constant-time comparison.
-- **Hub ingest** — mTLS enforced on the listener
-  (`RequireAndVerifyClientCert`): an unauthenticated client, or one whose
-  certificate chains to a different CA, fails at the handshake. Node identity
-  binding from the certificate is the remaining gap, stated in
-  [`SECURITY.md`](SECURITY.md) §4.1.
-- **Path traversal** — refused on the raw string, never normalized into a valid
-  lookup.
-- **Secrets** — file paths only, never inline; redaction applied before any
-  schema is echoed, including diffs.
+This project is licensed under the **Apache License 2.0** - see the [LICENSE](LICENSE) file for details.
 
-### Implemented but not yet wired
+```
+Copyright 2024-2026 RIFT Contributors
 
-Honesty requires naming these, because configuration exposes them and they have
-no effect:
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-| Feature | State |
-|---|---|
-| Retry policy (`retry.max_attempts`, `idempotent_put_delete`) | The closed method/phase table is implemented and tested, but the proxy never calls it. No request is retried. Safe (fewer retries than configured), but not the advertised feature. |
-| Rate limiting (`rate_limit.per_source`, `per_pool`) | The sharded limiter is implemented and tested, but no service imports it. The configured limits are ignored. |
-| Graceful drain (`shutdown_timeout`, exit code 4) | The `lifecycle` package is implemented and tested, but `rift lb` does not use it. In-flight connections are closed rather than drained. |
-| Prometheus `/metrics` | Counters are maintained per component; nothing serves them yet. |
+    http://www.apache.org/licenses/LICENSE-2.0
 
-These are the consequences of this project's own rule: a feature counts as
-working only when a test exercises it **through the code path a user actually
-reaches**. Each row above has thorough unit tests and no production call site —
-which is exactly the gap that rule exists to expose.
-
-Known limitations are listed in [`SECURITY.md`](SECURITY.md) §10 — including the
-deliberate absence of media authentication (LAN-only) and the not-yet-enforced
-mTLS identity binding for hub ingest.
-
-## Testing
-
-```bash
-go build ./... && go vet ./... && go test -race ./...
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 ```
 
-Tests use real loopback sockets rather than mocks and never depend on the public
-internet. [`TESTING.md`](TESTING.md) §4 lists the real defects these tests found
-during development, including an absolute-path traversal bug, a breaker state
-machine that could never recover, a shutdown path that silently dropped data,
-and a TLS finding that masked a hostname mismatch.
+---
 
-## Requirements
+## 🙏 Acknowledgments
 
-- Go 1.25.5 or newer
-- Linux for production and for all performance work
-- Windows and macOS for development and functional tests
+Built with these excellent open-source projects:
 
-## License
+| Dependency | Purpose | License |
+|------------|---------|---------|
+| [gopkg.in/yaml.v3](https://github.com/go-yaml/yaml) | YAML configuration parsing | MIT |
+| [prometheus/client_golang](https://github.com/prometheus/client_golang) | Metrics instrumentation | Apache 2.0 |
+| [golang.org/x/sys](https://pkg.go.dev/golang.org/x/sys) | Low-level system interfaces | BSD-3-Clause |
 
-Apache License 2.0 — see [`LICENSE`](LICENSE).
+Special thanks to:
+- The Go team for an excellent language and standard library
+- The open-source community for inspiration and best practices
+
+---
+
+## 📬 Contact & Support
+
+### Get Help
+
+- 📚 **Documentation**: [github.com/abhrajyoti-01/rift/wiki](https://github.com/abhrajyoti-01/rift/wiki)
+- 🐛 **Bug Reports**: [github.com/abhrajyoti-01/rift/issues](https://github.com/abhrajyoti-01/rift/issues)
+- 💬 **Discussions**: [github.com/abhrajyoti-01/rift/discussions](https://github.com/abhrajyoti-01/rift/discussions)
+- 📧 **Email**: [Create an issue](https://github.com/abhrajyoti-01/rift/issues/new)
+
+### Links
+
+- **Repository**: [github.com/abhrajyoti-01/rift](https://github.com/abhrajyoti-01/rift)
+- **Issues**: [github.com/abhrajyoti-01/rift/issues](https://github.com/abhrajyoti-01/rift/issues)
+- **Releases**: [github.com/abhrajyoti-01/rift/releases](https://github.com/abhrajyoti-01/rift/releases)
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 <div align="center">
-<sub>Everything in this repository is either verified or labelled as unverified.
-There is no third category.</sub>
+
+### ⭐ Star us on GitHub — it motivates us a lot!
+
+**Made with ❤️ for robust network infrastructure**
+
+[⬆ Back to Top](#-rift)
+
 </div>

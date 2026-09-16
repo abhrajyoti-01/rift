@@ -26,16 +26,16 @@ type Config struct {
 	MaxStreams                     int // global concurrent; default 64
 	MaxStreamsPerClient            int // default 4
 	ReadHeaderTimeout, IdleTimeout time.Duration
-	WriteTimeout                   time.Duration // per whole stream; seek resets
-	IOMode                         string        // "sendfile" (default) | "buffered"
-	Readahead                      int           // bytes, buffered mode; default 1 MiB
-	RateLimitPerClient             string        // e.g. "120/s"
+	WriteTimeout                   time.Duration
+	IOMode                         string // "sendfile" (default) | "buffered"
+	Readahead                      int    // bytes, buffered mode; default 1 MiB
+	RateLimitPerClient             string
 }
 
 const (
 	defaultMaxStreams        = 64
 	defaultMaxStreamsPerCli  = 4
-	defaultReadahead         = 1 << 20 // 1 MiB
+	defaultReadahead         = 1 << 20
 	defaultReadHeaderTimeout = 10 * time.Second
 	defaultIdleTimeout       = 120 * time.Second
 	defaultWriteTimeout      = 5 * time.Minute
@@ -49,7 +49,7 @@ type Metrics struct {
 	RangeRequests    [4]atomic.Uint64 // indexed by medmodel.RangeParseOutcome
 	AdmissionRefused atomic.Uint64
 	ClientStalls     atomic.Uint64
-	FirstByteNanos   atomic.Uint64 // cumulative, for mean; histograms are the harness's job
+	FirstByteNanos   atomic.Uint64
 	FirstByteCount   atomic.Uint64
 	// DeadlineUnsupported counts streams where the connection would not
 	// accept a write deadline, so slow-client protection fell back to the
@@ -63,7 +63,7 @@ type Server struct {
 	store *medmodel.IndexStore
 	// global admission gate and per-client gate
 	global  chan struct{}
-	clients sync.Map // remote-IP → *atomic.Int64
+	clients sync.Map
 	metrics Metrics
 }
 
@@ -121,7 +121,7 @@ func BuildIndex(root string, follow bool, exclude []string) (*medmodel.Index, er
 	assets := make(map[string]*medmodel.Asset)
 	walkErr := filepath.WalkDir(absRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil // unreadable entry: skip, index is best-effort
+			return nil
 		}
 		if d.IsDir() {
 			return nil

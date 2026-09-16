@@ -1,7 +1,4 @@
 // Package playersim is the player-model client: the only honest instrument
-// for rebuffer. A server log cannot see a client stall, so this package
-// models a playback clock and a playout buffer, and records startup latency
-// and underruns where they actually happen.
 package playersim
 
 import (
@@ -14,9 +11,9 @@ import (
 
 // PlayerConfig models one playback client.
 type PlayerConfig struct {
-	Bitrate       float64       // bytes/s of media consumption
-	InitialBuffer time.Duration // startup threshold of buffered media
-	PlayoutCap    int64         // playout buffer bytes cap
+	Bitrate       float64
+	InitialBuffer time.Duration
+	PlayoutCap    int64
 	// StallThreshold is how long the buffer must stay empty before it counts
 	// as a stall rather than jitter.
 	StallThreshold time.Duration
@@ -24,7 +21,7 @@ type PlayerConfig struct {
 }
 
 const (
-	defaultBitrate       = 25_000_000 / 8 // 25 Mbit/s in bytes/s
+	defaultBitrate       = 25_000_000 / 8
 	defaultInitialBuffer = 2 * time.Second
 	defaultPlayoutCap    = 64 << 20
 	defaultStallThresh   = 100 * time.Millisecond

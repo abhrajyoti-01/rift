@@ -1,7 +1,4 @@
 // Package benchenv produces the environment card: the machine-generated
-// record that makes a benchmark result reproducible. `rift bench report`
-// refuses to run without one, because a number without its environment is
-// not a fact.
 package benchenv
 
 import (
@@ -16,24 +13,24 @@ import (
 
 // Card is the reproducibility record for a benchmark run.
 type Card struct {
-	GeneratedAt   string `json:"generated_at"`
-	OS            string `json:"os"`
-	Arch          string `json:"arch"`
-	Kernel        string `json:"kernel,omitempty"`
-	GoVersion     string `json:"go_version"`
-	NumCPU        int    `json:"num_cpu"`
-	GOMAXPROCS    int    `json:"gomaxprocs"`
-	Compiler      string `json:"compiler"`
-	UlimitNoFile  string `json:"ulimit_no_file,omitempty"`
-	WSL2          bool   `json:"wsl2"`
-	WSL2Detail    string `json:"wsl2_detail,omitempty"`
-	CgroupCPU     string `json:"cgroup_cpu_max,omitempty"`
-	CgroupMemory  string `json:"cgroup_memory_max,omitempty"`
-	GOGC          string `json:"gogc,omitempty"`
-	GOMEMLIMIT    string `json:"gomemlimit,omitempty"`
-	BuildVersion  string `json:"build_version,omitempty"`
-	BuildCommit   string `json:"build_commit,omitempty"`
-	BuildVCSDirty bool   `json:"build_vcs_dirty,omitempty"`
+	GeneratedAt   string   `json:"generated_at"`
+	OS            string   `json:"os"`
+	Arch          string   `json:"arch"`
+	Kernel        string   `json:"kernel,omitempty"`
+	GoVersion     string   `json:"go_version"`
+	NumCPU        int      `json:"num_cpu"`
+	GOMAXPROCS    int      `json:"gomaxprocs"`
+	Compiler      string   `json:"compiler"`
+	UlimitNoFile  string   `json:"ulimit_no_file,omitempty"`
+	WSL2          bool     `json:"wsl2"`
+	WSL2Detail    string   `json:"wsl2_detail,omitempty"`
+	CgroupCPU     string   `json:"cgroup_cpu_max,omitempty"`
+	CgroupMemory  string   `json:"cgroup_memory_max,omitempty"`
+	GOGC          string   `json:"gogc,omitempty"`
+	GOMEMLIMIT    string   `json:"gomemlimit,omitempty"`
+	BuildVersion  string   `json:"build_version,omitempty"`
+	BuildCommit   string   `json:"build_commit,omitempty"`
+	BuildVCSDirty bool     `json:"build_vcs_dirty,omitempty"`
 	Notes         []string `json:"notes,omitempty"`
 }
 

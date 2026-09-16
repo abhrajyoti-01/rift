@@ -15,7 +15,7 @@ import (
 // supported and returns a configuration error when requested.
 type ListenOptions struct {
 	ReusePort bool
-	Backlog   int // advisory; honored where the platform allows
+	Backlog   int
 	KeepAlive time.Duration
 }
 
@@ -97,7 +97,7 @@ func defaultDenyRules() []denyRule {
 // means "use the default deny-set" — never "allow all" (fail-closed).
 type GuardOptions struct {
 	Deny  []netip.Prefix
-	Allow []netip.Prefix // operator allow-list; overrides deny
+	Allow []netip.Prefix
 }
 
 // Guard is the single outbound dial authorization path.

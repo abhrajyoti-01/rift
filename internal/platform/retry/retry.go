@@ -86,7 +86,7 @@ func (p Policy) delayFor(n int) time.Duration {
 		d = p.Backoff.Cap
 	}
 	if p.Backoff.Jitter > 0 {
-		j := 1 - p.Backoff.Jitter*rand.Float64() // full jitter: [1-J, 1]
+		j := 1 - p.Backoff.Jitter*rand.Float64()
 		d = time.Duration(float64(d) * j)
 	}
 	return d

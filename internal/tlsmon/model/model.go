@@ -73,7 +73,7 @@ func (c CertInfo) DaysUntilExpiry(now time.Time) int {
 type Report struct {
 	Target             string
 	Timestamp          time.Time
-	Chain              []CertInfo // leaf first, as presented
+	Chain              []CertInfo
 	NegotiatedProtocol string
 	NegotiatedCipher   string
 	Findings           []Finding

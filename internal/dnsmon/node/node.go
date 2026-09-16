@@ -38,8 +38,8 @@ type NodeConfig struct {
 	ClientCertFile string
 	ClientKeyFile  string
 	CACertFile     string
-	SpoolDir  string // offline spool directory; empty disables spooling
-	SpoolMax  int64  // spool byte cap; default 64 MiB
+	SpoolDir       string
+	SpoolMax       int64 // spool byte cap; default 64 MiB
 
 	// Now is injectable for tests.
 	Now func() time.Time
@@ -487,7 +487,7 @@ func (n *Node) DrainSpool(ctx context.Context) error {
 		}
 		var batch []dnsmodel.Observation
 		if jerr := json.Unmarshal(raw, &batch); jerr != nil {
-			os.Remove(path) // corrupt spool file: drop it, it is not data
+			os.Remove(path)
 			continue
 		}
 		if perr := n.postBatch(ctx, batch); perr != nil {

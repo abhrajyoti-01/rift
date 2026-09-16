@@ -94,7 +94,7 @@ func (p *Prober) queryOne(ctx context.Context, target dnsmodel.Target, eng *reso
 	q := wire.Question{
 		Name:  canonicalName(target.Name),
 		Type:  target.Type,
-		Class: 1, // IN
+		Class: 1,
 	}
 
 	obs := dnsmodel.Observation{

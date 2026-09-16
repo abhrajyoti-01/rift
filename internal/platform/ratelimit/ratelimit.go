@@ -22,18 +22,18 @@ type bucket struct {
 
 type shard struct {
 	mu  sync.Mutex
-	m   map[string]*list.Element // key → LRU element (payload *bucket)
-	lru list.List                // front = most recently used
+	m   map[string]*list.Element
+	lru list.List
 }
 
 // Sharded is the bounded-cardinality per-key limiter.
 type Sharded struct {
 	shards   []shard
-	capacity int // total tracked keys across shards
+	capacity int
 	mask     uint64
-	keyCount atomic.Int64 // distinct keys; incremented insert, decremented evict
+	keyCount atomic.Int64
 	evicted  atomic.Uint64
-	now      func() time.Time // injected clock
+	now      func() time.Time
 }
 
 // NewSharded builds a sharded limiter. shards is rounded to a power of two

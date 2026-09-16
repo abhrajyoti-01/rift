@@ -26,7 +26,6 @@ bench/fixtures/*
 .idea/
 .vscode/
 *.swp
-.qwen/
 
 # OS noise
 .DS_Store

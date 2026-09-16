@@ -1,7 +1,4 @@
 // Package loadgen is the RIFT load generator. Open-loop scenarios schedule
-// each request at its INTENDED deadline regardless of completion — the
-// coordinated-omission fix — and record both intended and actual start
-// times so the correction is auditable from raw samples.
 package loadgen
 
 import (
@@ -27,7 +24,7 @@ type Scenario struct {
 	Target     string        `json:"target"`
 	Duration   time.Duration `json:"duration_ms"`
 	Warmup     time.Duration `json:"warmup_ms"`
-	Loop       string        `json:"loop"` // "closed" | "open"
+	Loop       string        `json:"loop"`
 	Conns      int           `json:"conns"`
 	RatePerSec float64       `json:"rate_per_sec"`
 	Payload    int           `json:"payload_bytes"`
@@ -61,13 +58,13 @@ func (s Scenario) withDefaults() Scenario {
 // Sample is one request's raw record. IntendedStart is what makes an
 // open-loop run correctable; it is always emitted.
 type Sample struct {
-	IntendedStart time.Time `json:"intended_start"`
-	ActualStart   time.Time `json:"actual_start"`
+	IntendedStart time.Time     `json:"intended_start"`
+	ActualStart   time.Time     `json:"actual_start"`
 	Latency       time.Duration `json:"latency_ns"`
-	Status        int       `json:"status"`
-	Bytes         int64     `json:"bytes"`
-	ConnID        int       `json:"conn_id"`
-	Err           string    `json:"err,omitempty"`
+	Status        int           `json:"status"`
+	Bytes         int64         `json:"bytes"`
+	ConnID        int           `json:"conn_id"`
+	Err           string        `json:"err,omitempty"`
 }
 
 // Result summarizes a run.
@@ -111,7 +108,7 @@ func NewRunner(s Scenario) *Runner {
 				MaxIdleConns:        s.Conns * 2,
 				MaxIdleConnsPerHost: s.Conns * 2,
 				IdleConnTimeout:     90 * time.Second,
-				DialContext: (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+				DialContext:         (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
 			},
 		},
 	}

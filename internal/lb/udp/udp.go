@@ -19,9 +19,9 @@ type SessionID string
 // Session is one client-to-backend flow with one connected upstream socket
 // and one reply goroutine.
 type Session struct {
-	ID       SessionID
-	Upstream *net.UDPConn
-	LastSeen atomic.Int64 // unix nanos
+	ID                                   SessionID
+	Upstream                             *net.UDPConn
+	LastSeen                             atomic.Int64
 	UpPkts, UpBytes, DownPkts, DownBytes atomic.Uint64
 
 	done chan struct{}
@@ -79,10 +79,10 @@ type Metrics struct {
 	PacketsIn      atomic.Uint64
 	PacketsOut     atomic.Uint64
 	Sessions       atomic.Int64
-	DroppedTable   atomic.Uint64 // table full
-	DroppedSweep   atomic.Uint64 // expired
-	DroppedDial    atomic.Uint64 // upstream unreachable
-	DroppedNoRoute atomic.Uint64 // no healthy backend
+	DroppedTable   atomic.Uint64
+	DroppedSweep   atomic.Uint64
+	DroppedDial    atomic.Uint64
+	DroppedNoRoute atomic.Uint64
 }
 
 // Server is the UDP proxy: one read loop on the shared listener socket.
@@ -91,7 +91,7 @@ type Server struct {
 	snap     func() *lbmodel.Snapshot
 	pk       atomic.Pointer[picker.Picker]
 	listener atomic.Pointer[net.UDPConn]
-	sessions sync.Map // SessionID → *Session
+	sessions sync.Map
 	metrics  Metrics
 }
 
@@ -221,7 +221,7 @@ func (s *Server) replyLoop(sess *Session, client *net.UDPAddr) {
 		n, _, err := sess.Upstream.ReadFromUDP(buf)
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				return // idles out; the sweeper will reap it
+				return
 			}
 			return
 		}

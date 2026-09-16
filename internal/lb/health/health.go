@@ -21,7 +21,7 @@ type Config struct {
 	// HTTP checks only:
 	Method string
 	Path   string
-	Expect []int // e.g. {200, 204}; empty = {200}
+	Expect []int
 }
 
 const (
@@ -29,7 +29,7 @@ const (
 	defaultTimeout  = 2 * time.Second
 	defaultRise     = 2
 	defaultFall     = 3
-	maxBodyRead     = 1 << 10 // checks read at most 1 KiB of body
+	maxBodyRead     = 1 << 10
 )
 
 func (c Config) withDefaults() Config {
@@ -124,7 +124,7 @@ func (c HTTPChecker) Check(ctx context.Context, b *lbmodel.Backend) CheckResult 
 		Timeout: timeout,
 		Transport: &http.Transport{
 			DisableKeepAlives: true,
-			DialContext: (&net.Dialer{Timeout: timeout}).DialContext,
+			DialContext:       (&net.Dialer{Timeout: timeout}).DialContext,
 		},
 	}
 	// The probe reads no body: closing early is correct and cheap.

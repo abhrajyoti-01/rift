@@ -24,10 +24,10 @@ var (
 
 // EngineConfig configures one engine bound to one upstream resolver.
 type EngineConfig struct {
-	Resolver    netip.AddrPort // e.g. 1.1.1.1:53
-	Concurrency int            // per-resolver worker cap, default 8
-	Timeout     time.Duration  // per attempt, default 2s
-	EDNSUDPSize uint16         // default 1232
+	Resolver    netip.AddrPort
+	Concurrency int           // per-resolver worker cap, default 8
+	Timeout     time.Duration // per attempt, default 2s
+	EDNSUDPSize uint16        // default 1232
 }
 
 // Engine queries one upstream resolver.

@@ -28,9 +28,9 @@ type Picker interface {
 // Picker kind identifiers. These are the closed set accepted by New and
 // referenced by configuration.
 const (
-	RoundRobin     = "round_robin"
-	WeightedRR     = "weighted_round_robin"
-	LeastConns     = "least_connections"
+	RoundRobin = "round_robin"
+	WeightedRR = "weighted_round_robin"
+	LeastConns = "least_connections"
 )
 
 // New builds from config; kind ∈ round_robin | weighted_round_robin |

@@ -24,7 +24,7 @@ type Baseline struct {
 // BaselineMetric is one metric's expected value and permitted drift.
 type BaselineMetric struct {
 	Value     float64 `json:"value"`
-	Tolerance float64 `json:"tolerance"` // fractional, e.g. 0.15 = ±15%
+	Tolerance float64 `json:"tolerance"`
 	Unit      string  `json:"unit"`
 	// HigherIsBetter flips the regression direction for throughput-like
 	// metrics.
@@ -64,15 +64,15 @@ func Run(ctx context.Context, scenarioDir, resultsDir, scenarioID string) (*load
 		return res, errs.Wrap(err, errs.ClassResource, "bench.run", "write card")
 	}
 	summary := map[string]any{
-		"scenario":  res.Scenario.Name,
-		"completed": res.Completed,
-		"errors":    res.Errors,
+		"scenario":   res.Scenario.Name,
+		"completed":  res.Completed,
+		"errors":     res.Errors,
 		"elapsed_ms": res.Elapsed.Milliseconds(),
-		"p50_ns":    res.P50.Nanoseconds(),
-		"p95_ns":    res.P95.Nanoseconds(),
-		"p99_ns":    res.P99.Nanoseconds(),
-		"max_ns":    res.Max.Nanoseconds(),
-		"bytes":     res.Bytes,
+		"p50_ns":     res.P50.Nanoseconds(),
+		"p95_ns":     res.P95.Nanoseconds(),
+		"p99_ns":     res.P99.Nanoseconds(),
+		"max_ns":     res.Max.Nanoseconds(),
+		"bytes":      res.Bytes,
 	}
 	summaryJSON, _ := json.MarshalIndent(summary, "", "  ")
 	if err := os.WriteFile(filepath.Join(outDir, "summary.json"), summaryJSON, 0o644); err != nil {

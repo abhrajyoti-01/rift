@@ -25,8 +25,8 @@ type Config struct {
 	DialTimeout  time.Duration // default 3s
 	IdleTimeout  time.Duration // default 60s, per-direction
 	CopyDeadline time.Duration // default 30s, reset per Read/Write
-	MaxConns     int           // per listener; admission gate
-	MaxRetries   int           // dial-phase repicks, distinct backends
+	MaxConns     int
+	MaxRetries   int
 	Splice       bool
 }
 
@@ -59,20 +59,20 @@ func (c Config) withDefaults() Config {
 
 // Metrics is the L4 accounting surface.
 type Metrics struct {
-	Accepted      atomic.Uint64
-	Rejected      atomic.Uint64
-	Closed        atomic.Uint64
-	UpstreamBytes atomic.Uint64
+	Accepted        atomic.Uint64
+	Rejected        atomic.Uint64
+	Closed          atomic.Uint64
+	UpstreamBytes   atomic.Uint64
 	DownstreamBytes atomic.Uint64
-	DialFailures  atomic.Uint64
-	ActiveConns   atomic.Int64
+	DialFailures    atomic.Uint64
+	ActiveConns     atomic.Int64
 }
 
 // Forwarder proxies one listener's connections to its pool.
 type Forwarder struct {
 	cfg     Config
 	snap    func() *lbmodel.Snapshot
-	pools   sync.Map // lbmodel.PoolID → picker.Picker
+	pools   sync.Map
 	metrics Metrics
 	// buffer pool for the non-splice copy path. Only used when Splice is
 	// false; a pool that is not needed costs readability, so it is a field

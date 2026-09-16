@@ -18,8 +18,8 @@ const (
 
 // Target is one monitored (zone, name, type, view) tuple.
 type Target struct {
-	Zone string // "example.com."
-	Name string // "www.example.com."
+	Zone string
+	Name string
 	Type wire.Type
 	View View
 }
@@ -39,7 +39,7 @@ type Answer struct {
 type Observation struct {
 	NodeID    string
 	View      View
-	Resolver  string // "1.1.1.1:53" or "ns1.example.com:53"
+	Resolver  string
 	QName     string
 	QType     wire.Type
 	RCode     uint8
@@ -47,7 +47,7 @@ type Observation struct {
 	Truncated bool
 	Transport string // "udp" | "tcp"
 	Latency   time.Duration
-	Timestamp time.Time // UTC
+	Timestamp time.Time
 	ErrClass  errs.Class
 }
 

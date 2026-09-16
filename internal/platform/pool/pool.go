@@ -15,7 +15,7 @@ var (
 
 const (
 	minWorkers        = 1
-	maxQueuePerWorker = 1 << 20 // sanity ceiling; configs above this are config errors
+	maxQueuePerWorker = 1 << 20
 )
 
 // Executor is a bounded worker pool over queued work items of type T.

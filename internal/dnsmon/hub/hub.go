@@ -27,7 +27,7 @@ import (
 // HubConfig configures the hub.
 type HubConfig struct {
 	IngestAddr string // ":9001" mTLS by default
-	QueryAddr  string // ":9002"
+	QueryAddr  string
 	// ServerCertFile and ServerKeyFile identify this hub; ClientCAFile is
 	// the CA that node client certificates must chain to. All three are
 	// required unless AllowPlaintextIngest is set.
@@ -38,8 +38,8 @@ type HubConfig struct {
 	// local development; configuration validation refuses it on a routable
 	// bind, and Run prints a warning when it is active.
 	AllowPlaintextIngest bool
-	WindowKeys           int    // per (target,view); default 4096
-	SegmentBytes         int64  // JSONL rotation size; default 128 MiB
+	WindowKeys           int   // per (target,view); default 4096
+	SegmentBytes         int64 // JSONL rotation size; default 128 MiB
 	DataDir              string
 	MinResponding        int
 	ConvergenceWindow    time.Duration
@@ -154,8 +154,8 @@ func (w *Window) Keys() int {
 
 // Hub is the aggregation hub process.
 type Hub struct {
-	cfg    HubConfig
-	window *Window
+	cfg     HubConfig
+	window  *Window
 	metrics Metrics
 
 	segMu    sync.Mutex
@@ -352,16 +352,16 @@ func (h *Hub) appendSegment(o dnsmodel.Observation) error {
 }
 
 type segmentRecord struct {
-	QName     string          `json:"qname"`
-	QType     uint16          `json:"qtype"`
-	View      uint8           `json:"view"`
-	NodeID    string          `json:"node_id"`
-	Resolver  string          `json:"resolver"`
-	RCode     uint8           `json:"rcode"`
+	QName     string               `json:"qname"`
+	QType     uint16               `json:"qtype"`
+	View      uint8                `json:"view"`
+	NodeID    string               `json:"node_id"`
+	Resolver  string               `json:"resolver"`
+	RCode     uint8                `json:"rcode"`
 	Answers   []dnsnode.WireAnswer `json:"answers"`
-	LatencyMS float64         `json:"latency_ms"`
-	Timestamp string          `json:"ts"`
-	ErrClass  uint8           `json:"err_class"`
+	LatencyMS float64              `json:"latency_ms"`
+	Timestamp string               `json:"ts"`
+	ErrClass  uint8                `json:"err_class"`
 }
 
 func toWireAnswers(ans []dnsmodel.Answer) []dnsnode.WireAnswer {
@@ -469,8 +469,7 @@ func (h *Hub) handleObservations(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	obs := h.window.ForTarget(qname, typ)
-	// Cap the response: unbounded responses are a resource-exhaustion
-	// primitive (API_SPEC §2).
+	// Cap the response to bound memory use.
 	const maxPage = 1000
 	if len(obs) > maxPage {
 		obs = obs[len(obs)-maxPage:]

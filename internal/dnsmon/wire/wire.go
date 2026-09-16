@@ -144,9 +144,9 @@ func EncodeQuery(q Question, ednsUDPSize uint16) []byte {
 		// not be emitted with a predictable zero transaction ID.
 		return nil
 	}
-	binary.BigEndian.PutUint16(buf[2:4], 0x0100) // RD=1
-	binary.BigEndian.PutUint16(buf[4:6], 1)      // QDCOUNT
-	binary.BigEndian.PutUint16(buf[10:12], 1)    // ARCOUNT (OPT)
+	binary.BigEndian.PutUint16(buf[2:4], 0x0100)
+	binary.BigEndian.PutUint16(buf[4:6], 1)
+	binary.BigEndian.PutUint16(buf[10:12], 1)
 	off := 12
 	off = appendName(buf, off, q.Name)
 	binary.BigEndian.PutUint16(buf[off:off+2], uint16(q.Type))

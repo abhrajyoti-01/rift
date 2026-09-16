@@ -20,22 +20,22 @@ import (
 type Config struct {
 	PoolID                lbmodel.PoolID
 	MaxIdleConnsPerHost   int // default 32 per backend
-	MaxIdleConns          int // global
+	MaxIdleConns          int
 	IdleConnTimeout       time.Duration
 	ExpectContinueTimeout time.Duration
-	MaxBodyBytes          int64    // early 413; default 64 MiB
-	MaxAttempts           int      // retries (not attempts) for the closed table
-	Forwarded             string   // "" | "rfc7239"
-	TrustedProxies        []string // empty = trust nobody for attribution
+	MaxBodyBytes          int64 // early 413; default 64 MiB
+	MaxAttempts           int   // retries (not attempts) for the closed table
+	Forwarded             string
+	TrustedProxies        []string
 }
 
 const (
-	defaultMaxIdlePerHost   = 32
-	defaultIdleConnTimeout  = 90 * time.Second
-	defaultExpectContinue   = 1 * time.Second
-	defaultMaxBodyBytes     = 64 << 20
-	defaultMaxAttempts      = 2
-	bufferPoolSize          = 16 << 10
+	defaultMaxIdlePerHost  = 32
+	defaultIdleConnTimeout = 90 * time.Second
+	defaultExpectContinue  = 1 * time.Second
+	defaultMaxBodyBytes    = 64 << 20
+	defaultMaxAttempts     = 2
+	bufferPoolSize         = 16 << 10
 )
 
 func (c Config) withDefaults() Config {
@@ -63,9 +63,9 @@ type Metrics struct {
 	Responses2xx   atomic.Uint64
 	Responses4xx   atomic.Uint64
 	Responses5xx   atomic.Uint64
-	Rejected       atomic.Uint64 // 413/431/etc. by us
+	Rejected       atomic.Uint64
 	Retries        atomic.Uint64
-	RetryRefused   atomic.Uint64 // post-write non-idempotent refusals
+	RetryRefused   atomic.Uint64
 	UpstreamErrors atomic.Uint64
 }
 
@@ -87,12 +87,12 @@ func New(cfg Config, snap func() *lbmodel.Snapshot) *Proxy {
 	p.bufPool.New = func() any { return make([]byte, bufferPoolSize) }
 
 	p.rp = &httputil.ReverseProxy{
-		Director:      p.director,
-		Transport:     p.transport(),
-		BufferPool:    p.bufferPool(),
+		Director:       p.director,
+		Transport:      p.transport(),
+		BufferPool:     p.bufferPool(),
 		ModifyResponse: p.modifyResponse,
-		ErrorHandler:  p.errorHandler,
-		FlushInterval: -1, // stream immediately: this is a proxy, not a buffer
+		ErrorHandler:   p.errorHandler,
+		FlushInterval:  -1,
 	}
 	return p
 }
@@ -250,7 +250,7 @@ func (p *Proxy) transport() http.RoundTripper {
 		ExpectContinueTimeout: p.cfg.ExpectContinueTimeout,
 		// Backend cleartext h2c stays off: it is a smuggling amplifier and
 		// must be an explicit opt-in with a logged warning.
-		ForceAttemptHTTP2: false,
+		ForceAttemptHTTP2:   false,
 		TLSHandshakeTimeout: 5 * time.Second,
 		DisableCompression:  true, // do not alter representations in transit
 	}

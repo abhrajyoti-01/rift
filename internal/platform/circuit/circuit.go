@@ -40,7 +40,7 @@ type Breaker struct {
 	state             state
 	consecFailures    int
 	halfOpenSuccesses int
-	halfOpenAttempts  int // probes admitted this half-open cycle
+	halfOpenAttempts  int
 	openedAt          time.Time
 	now               func() time.Time
 }
@@ -89,10 +89,10 @@ func (b *Breaker) Allow() bool {
 			b.state = stateHalfOpen
 			b.halfOpenSuccesses = 0
 			b.halfOpenAttempts = 1
-			return true // first probe
+			return true
 		}
 		return false
-	default: // half-open: admit until the probe budget is consumed
+	default:
 		if b.halfOpenAttempts < b.cfg.SuccessThreshold {
 			b.halfOpenAttempts++
 			return true

@@ -19,7 +19,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	const size = 1 << 20 // 1 MiB
+	const size = 1 << 20
 	data := make([]byte, size)
 	for i := range data {
 		data[i] = byte(i % 251)

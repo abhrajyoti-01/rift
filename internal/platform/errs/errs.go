@@ -56,7 +56,7 @@ type Error struct {
 	Class Class
 	Op    string // dotted operation path, e.g. "lb.l4.copyLoop"
 	Msg   string
-	Err   error // wrapped; may be nil
+	Err   error
 }
 
 // New constructs an Error with no wrapped cause.

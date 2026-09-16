@@ -20,11 +20,11 @@ func (l ListenerID) String() string { return string(l) }
 // across Snapshots when unchanged (copy-on-write on reload).
 type Backend struct {
 	ID     string
-	Addr   string // host:port, validated at config time
-	Weight int    // ≥ 1
+	Addr   string
+	Weight int
 
-	Conns  atomic.Int64 // in-flight; ± on connect/close
-	Health atomic.Bool  // written only by the health system
+	Conns  atomic.Int64
+	Health atomic.Bool
 }
 
 // Pool is an ordered, immutable-per-snapshot backend set. Picker names the
@@ -40,7 +40,7 @@ type Pool struct {
 type TLSConfig struct {
 	CertFile   string
 	KeyFile    string
-	MinVersion string // "1.2" | "1.3"
+	MinVersion string
 }
 
 // ListenerSpec binds one data-plane socket to one pool.
@@ -50,7 +50,7 @@ type ListenerSpec struct {
 	Bind     string
 	Pool     PoolID
 	MaxConns int
-	TLS      *TLSConfig // nil = cleartext
+	TLS      *TLSConfig
 }
 
 // Snapshot is the immutable configuration the data plane reads through one

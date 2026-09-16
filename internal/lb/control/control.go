@@ -23,7 +23,7 @@ type Server struct {
 	// snapshot is the single config read path for the whole data plane.
 	snapshot atomic.Pointer[lbmodel.Snapshot]
 
-	mu      sync.Mutex // serializes reloads
+	mu      sync.Mutex
 	version uint64
 	// removeQueued tracks backend addrs that were removed by a reload and
 	// are draining: established connections keep serving until idle grace.

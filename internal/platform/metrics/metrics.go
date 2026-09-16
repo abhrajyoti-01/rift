@@ -5,10 +5,10 @@ import "net/http"
 // Buckets are the fixed histogram bucket sets used by the application.
 type Buckets struct {
 	LatencyLAN    []float64 // .00005 .. 2.5 — LB request, pick, media first-byte, DNS query
-	LatencyWAN    []float64 // .05 .. 10 — TLS handshake
-	BytesTransfer []float64 // 4k .. 1G — media stream bytes
-	Ratio         []float64 // .5 .. 1 — reuse ratio, readahead hit
-	BatchSize     []float64 // 1 .. 4096 — hub ingest batch
+	LatencyWAN    []float64
+	BytesTransfer []float64
+	Ratio         []float64
+	BatchSize     []float64
 }
 
 // Registry is the per-process Prometheus registry with build info and

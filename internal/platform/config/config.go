@@ -1,11 +1,3 @@
-// Package config is RIFT's configuration engine (ARCHITECTURE §10): YAML
-// load, strict unknown-field rejection, programmatic validation with
-// field-path errors, redaction, and field-path diffing. rift config
-// validate runs this identical path, so CI checks the file an operator
-// would actually write.
-//
-// Validation is pure: it never touches the network or the filesystem
-// beyond reading the config file itself.
 package config
 
 import (
@@ -36,11 +28,11 @@ type Schema struct {
 
 // Observability is the shared logging/metrics/admin configuration.
 type Observability struct {
-	LogLevel       string   `yaml:"log_level"`
-	LogFormat      string   `yaml:"log_format"`
-	AdminAddr      string   `yaml:"admin_addr"`
-	AllowRemote    bool     `yaml:"allow_remote"`
-	AdminTokenFile string   `yaml:"admin_token_file"` // path; never inline
+	LogLevel        string   `yaml:"log_level"`
+	LogFormat       string   `yaml:"log_format"`
+	AdminAddr       string   `yaml:"admin_addr"`
+	AllowRemote     bool     `yaml:"allow_remote"`
+	AdminTokenFile  string   `yaml:"admin_token_file"` // path; never inline
 	ShutdownTimeout Duration `yaml:"shutdown_timeout"`
 }
 
@@ -49,25 +41,25 @@ type LB struct {
 	Listeners           []Listener `yaml:"listeners"`
 	Pools               []Pool     `yaml:"pools"`
 	TrustedProxies      []string   `yaml:"trusted_proxies"`
-	Forwarded           string     `yaml:"forwarded"` // "" | rfc7239
+	Forwarded           string     `yaml:"forwarded"`
 	IdempotentPutDelete bool       `yaml:"idempotent_put_delete"`
 }
 
 // Listener binds one data-plane socket to one pool.
 type Listener struct {
-	ID       string    `yaml:"id"`
-	Proto    string    `yaml:"proto"` // tcp|udp|http
-	Bind     string    `yaml:"bind"`
-	Pool     string    `yaml:"pool"`
-	MaxConns int       `yaml:"max_conns"`
-	TLS      *TLSTerm  `yaml:"tls"`
+	ID       string   `yaml:"id"`
+	Proto    string   `yaml:"proto"` // tcp|udp|http
+	Bind     string   `yaml:"bind"`
+	Pool     string   `yaml:"pool"`
+	MaxConns int      `yaml:"max_conns"`
+	TLS      *TLSTerm `yaml:"tls"`
 }
 
 // TLSTerm terminates TLS on a listener (key material by path only).
 type TLSTerm struct {
 	CertFile   string `yaml:"cert_file"`
 	KeyFile    string `yaml:"key_file"`
-	MinVersion string `yaml:"min_version"` // "1.2"|"1.3"
+	MinVersion string `yaml:"min_version"`
 }
 
 // Pool is a backend set plus its picker, health, timeouts, retry, limits.
@@ -131,7 +123,7 @@ type RateLimit struct {
 
 // DNS is the DNS monitoring section (node or hub role).
 type DNS struct {
-	Role       string      `yaml:"role"` // node|hub
+	Role       string      `yaml:"role"`
 	NodeID     string      `yaml:"node_id"`
 	Location   string      `yaml:"location"`
 	Resolvers  []Resolver  `yaml:"resolvers"`
@@ -145,8 +137,8 @@ type DNS struct {
 	// SpoolDir is where observations are written while the hub is
 	// unreachable. Empty disables the spool entirely (shipping failures then
 	// count against dropped_ring_full instead of being buffered to disk).
-	SpoolDir  string   `yaml:"spool_dir"`
-	Hub       HubRef   `yaml:"hub"`
+	SpoolDir  string    `yaml:"spool_dir"`
+	Hub       HubRef    `yaml:"hub"`
 	HubServer HubServer `yaml:"hub_server"`
 }
 
@@ -161,8 +153,8 @@ type Resolver struct {
 type DNSTarget struct {
 	Zone string `yaml:"zone"`
 	Name string `yaml:"name"`
-	Type string `yaml:"type"` // A|AAAA|CNAME|MX|TXT|NS
-	View string `yaml:"view"` // recursive|authoritative|both
+	Type string `yaml:"type"`
+	View string `yaml:"view"`
 }
 
 // HubRef points a node at its hub.
@@ -175,11 +167,11 @@ type HubRef struct {
 
 // HubServer configures the hub's own listeners.
 type HubServer struct {
-	IngestAddr        string   `yaml:"ingest_addr"`
-	QueryAddr         string   `yaml:"query_addr"`
-	ServerCertFile    string   `yaml:"server_cert_file"`
-	ServerKeyFile     string   `yaml:"server_key_file"`
-	ClientCAFile      string   `yaml:"client_ca_file"`
+	IngestAddr     string `yaml:"ingest_addr"`
+	QueryAddr      string `yaml:"query_addr"`
+	ServerCertFile string `yaml:"server_cert_file"`
+	ServerKeyFile  string `yaml:"server_key_file"`
+	ClientCAFile   string `yaml:"client_ca_file"`
 	// AllowPlaintextIngest opts out of mTLS for ingest. It exists only for
 	// local development; starting with it set logs a prominent warning, and
 	// a routable ingest bind with it set is refused outright.
@@ -198,15 +190,15 @@ type TLS struct {
 	ExpiryWarnDays      int         `yaml:"expiry_warn_days"`
 	ExpiryCritDays      int         `yaml:"expiry_crit_days"`
 	ConsecutiveFailures int         `yaml:"consecutive_failures"`
-	Root                string      `yaml:"root"` // system | CA file path
+	Root                string      `yaml:"root"`
 }
 
 // TLSTarget is one monitored TLS endpoint.
 type TLSTarget struct {
 	Host   string `yaml:"host"`
 	Port   int    `yaml:"port"`
-	Floor  string `yaml:"floor"`  // "1.2"|"1.3"
-	Verify string `yaml:"verify"` // report|strict
+	Floor  string `yaml:"floor"`
+	Verify string `yaml:"verify"`
 }
 
 // Media is the media server section.
@@ -215,7 +207,7 @@ type Media struct {
 	Root                string   `yaml:"root"`
 	MaxStreams          int      `yaml:"max_streams"`
 	MaxStreamsPerClient int      `yaml:"max_streams_per_client"`
-	IOMode              string   `yaml:"io_mode"` // sendfile|buffered
+	IOMode              string   `yaml:"io_mode"`
 	Readahead           string   `yaml:"readahead"`
 	RateLimitPerClient  float64  `yaml:"rate_limit_per_client"`
 	ReadHeaderTimeout   Duration `yaml:"read_header_timeout"`
